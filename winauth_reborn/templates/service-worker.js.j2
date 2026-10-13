@@ -20,7 +20,7 @@ self.addEventListener("activate", (event) => {
   })());
 });
 self.addEventListener("message", (event) => {
-  if (event.data === "ACTIVATE_UPDATE") self.skipWaiting();
+  if (event.data === "ACTIVATE_UPDATE") event.waitUntil(self.skipWaiting());
   else if (event.data === "CLEAN_OLD_CACHES") {
     event.waitUntil(deleteOldCaches().then(() => event.ports[0]?.postMessage("cleaned")));
   } else if (event.data === "GET_CACHE_INFO") {
