@@ -16,6 +16,7 @@ let recoveryAccount = null;
 let recoveryTimer;
 let recoveryGeneration = 0;
 let lastActivity = performance.now();
+let initialized = false;
 let activeSteam = null;
 let emailFlow = null;
 let toastTimer;
@@ -561,6 +562,7 @@ $("#steam-dialog").addEventListener("close", () => {
 });
 
 document.addEventListener("visibilitychange", () => {
+  if (!initialized) return;
   if (!document.hidden) loadAccounts();
   else {
     clearRecovery();
@@ -572,17 +574,21 @@ for (const event of ["pointerdown", "pointermove", "keydown", "scroll"]) {
   document.addEventListener(event, () => { lastActivity = performance.now(); }, { passive: true });
 }
 document.addEventListener("keydown", (event) => {
-  if (event.ctrlKey || event.metaKey || event.altKey || document.querySelector("dialog[open]") ||
+  if (!initialized || event.ctrlKey || event.metaKey || event.altKey || document.querySelector("dialog[open]") ||
       event.target.closest("input, textarea, select, [contenteditable]")) return;
   if (event.key === "/") { event.preventDefault(); $("#search").focus(); }
   else if (event.key.toLowerCase() === "h") setPrivacy(!hiddenCodes);
   else if (event.key === ",") { event.preventDefault(); openSettings(); }
 });
 setInterval(() => {
+  if (!initialized) return;
   if (settings?.auto_hide_seconds && performance.now() - lastActivity > settings.auto_hide_seconds * 1000) {
     setPrivacy(true);
   }
   updateCards();
   if (!document.hidden) loadAccounts();
 }, 1000);
-document.addEventListener("DOMContentLoaded", () => loadAccounts(true));
+document.addEventListener("DOMContentLoaded", () => {
+  initialized = true;
+  loadAccounts(true);
+});

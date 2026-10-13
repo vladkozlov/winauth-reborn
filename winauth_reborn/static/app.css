@@ -48,7 +48,7 @@ button, input, textarea { outline-offset: 4px; }
 a { color: inherit; text-decoration: none; }
 .sidebar { width: 240px; position: fixed; inset: 0 auto 0 0; padding: 34px 22px; border-right: 1px solid var(--border); background: var(--sidebar); display: flex; flex-direction: column; }
 .brand { display: flex; gap: 12px; align-items: center; font-size: 23px; font-weight: 750; letter-spacing: -.7px; margin-bottom: 58px; }
-.brand-mark { display: grid; place-items: center; width: 43px; height: 43px; background: var(--accent); color: #1a2614; border-radius: 13px; font-size: 24px; }
+.brand-mark { display: grid; place-items: center; width: 43px; height: 43px; background: var(--accent); color: var(--primary-text); border-radius: 13px; font-size: 24px; }
 .brand-sub { display: block; color: var(--muted); font-size: 9px; letter-spacing: 3.4px; font-weight: 600; margin-top: -5px; }
 .nav-caption, .eyebrow, .overview-label { font-size: 10px; letter-spacing: 1.5px; font-weight: 600; color: var(--muted); }
 .nav-caption { padding: 0 12px; margin-bottom: 14px; }
@@ -86,7 +86,7 @@ h2 { font-size: 23px; font-weight: 600; letter-spacing: -.5px; margin: 6px 0 10p
 .muted { color: var(--muted); font-size: 13px; }
 .account-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
 .account-card { --card-color: #b4ef82; background: var(--panel); border: 1px solid var(--border); border-top: 3px solid var(--card-color); border-radius: 13px; padding: 22px; overflow: hidden; transition: border-color .15s; }
-.account-card:hover { border-color: #49554d; }
+.account-card:hover { border-color: color-mix(in srgb, var(--text) 22%, var(--border)); border-top-color: var(--card-color); }
 .card-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
 .service-icon { width: 42px; height: 42px; flex-shrink: 0; display: grid; place-items: center; background: #8ebfff15; border: 1px solid #8ebfff20; color: #a5c9fa; border-radius: 11px; font-weight: 600; font-size: 20px; }
 .service-icon.steam { color: #c9b8ff; background: #c9b8ff10; border-color: #c9b8ff20; }
@@ -121,7 +121,7 @@ h2 { font-size: 23px; font-weight: 600; letter-spacing: -.5px; margin: 6px 0 10p
 .copy-button { padding: 7px 10px; border-radius: 7px; font-size: 11px; color: var(--muted); background: #ffffff04; border: 1px solid var(--border); }
 .copy-button:hover { color: var(--accent); border-color: #b4ef8240; }
 .time-row { display: flex; align-items: center; gap: 12px; margin-top: 13px; }
-.timer { height: 3px; background: #303831; flex: 1; overflow: hidden; border-radius: 2px; }
+.timer { height: 3px; background: var(--border); flex: 1; overflow: hidden; border-radius: 2px; }
 .timer-fill { width: 100%; height: 100%; background: var(--accent); transform-origin: left; transition: transform .3s linear; }
 .timer-fill.urgent { background: #f2bc75; }
 .remaining { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--muted); min-width: 26px; text-align: right; }

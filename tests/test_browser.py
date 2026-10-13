@@ -219,11 +219,22 @@ def test_card_editor_icons_colors_pins_and_custom_upload(browser_page, live_app)
         has=page.get_by_role("heading", name="Work account")
     )
     expect(card.locator(".icon-shield-check")).to_be_visible()
+    page.evaluate("""async () => {
+      const image = new Image();
+      image.src = "/static/icons/shield-check.svg";
+      await image.decode();
+      if (!image.naturalWidth || !image.naturalHeight) throw new Error("SVG icon did not load");
+    }""")
+    assert "shield-check.svg" in card.locator(".icon-shield-check").evaluate(
+        "(node) => getComputedStyle(node).maskImage"
+    )
     expect(card.get_by_role("button", name="Unpin Work account")).to_have_attribute(
         "aria-pressed", "true"
     )
     record = next(r for r in live_app[0].extensions["vault"].list() if r["name"] == "Work account")
     assert record["period"] == 45 and record["color"] == "#8ebfff"
+    card.hover()
+    expect(card).to_have_css("border-top-color", "rgb(142, 191, 255)")
     page.reload()
     expect(card.locator(".icon-shield-check")).to_be_visible()
     card.get_by_role("button", name="Edit Work account").click()
