@@ -64,6 +64,7 @@ def browser_edition(chromium, static_browser):
     page.on("pageerror", lambda error: errors.append(str(error)))
     context.on("request", lambda request: requests.append(request.url))
     page.goto(static_browser[0])
+    expect(page.locator("#add-steam-button")).to_have_count(0)
     expect(page.locator("#browser-unlock-submit")).to_have_text("Create browser vault")
     page.locator('#browser-unlock-form [name="password"]').fill(PASSWORD)
     page.locator('#browser-unlock-form [name="confirm_password"]').fill(PASSWORD)

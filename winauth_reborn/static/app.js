@@ -19,6 +19,7 @@ let lastActivity = performance.now();
 let initialized = false;
 let activeSteam = null;
 let emailFlow = null;
+let enrollmentFlow = null;
 let toastTimer;
 let qrStream = null;
 let qrFrame = null;
@@ -375,6 +376,69 @@ function openAddTotp() {
   $("#add-totp-dialog").showModal();
 }
 
+function setSteamEnrollmentStage(stage) {
+  for (const name of ["login", "challenge", "activation", "success"]) {
+    $(`#steam-enroll-${name}`).hidden = name !== stage;
+  }
+}
+
+function openSteamEnrollment() {
+  enrollmentFlow = null;
+  $("#steam-enroll-error").textContent = "";
+  $("#steam-enroll-login-form").reset();
+  $("#steam-enroll-challenge-form").reset();
+  $("#steam-enroll-activation-form").reset();
+  $("#steam-enroll-code-field").hidden = false;
+  $("#steam-recovery-code").textContent = "";
+  setSteamEnrollmentStage("login");
+  $("#steam-enroll-dialog").showModal();
+}
+
+function showSteamEnrollmentResult(result) {
+  enrollmentFlow = result.flow;
+  $("#steam-enroll-error").textContent = "";
+  if (result.needs_code || result.needs_approval) {
+    setSteamEnrollmentStage("challenge");
+    $("#steam-enroll-challenge-message").textContent = result.message;
+    $("#steam-enroll-code-field").hidden = !result.needs_code;
+    $("#steam-enroll-challenge-form [name=code]").required = Boolean(result.needs_code);
+    if (result.needs_code) $("#steam-enroll-challenge-form [name=code]").focus();
+    return;
+  }
+  if (result.needs_activation) {
+    setSteamEnrollmentStage("activation");
+    $("#steam-enroll-phone").textContent = result.phone_hint
+      ? `Steam sent an activation code to the phone number ending in ${result.phone_hint}.`
+      : result.message;
+    $("#steam-enroll-activation-form [name=code]").focus();
+    return;
+  }
+  enrollmentFlow = null;
+  $("#steam-recovery-code").textContent = result.recovery_code;
+  setSteamEnrollmentStage("success");
+  loadAccounts(true);
+  toast(result.added ? "Steam account added" : "Steam authenticator was already in your vault");
+}
+
+async function steamEnrollmentRequest(path, data, submit) {
+  const label = submit.textContent;
+  submit.disabled = true;
+  submit.textContent = "Please wait...";
+  $("#steam-enroll-error").textContent = "";
+  try {
+    const result = await json(path, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    showSteamEnrollmentResult(result);
+  } catch (error) {
+    $("#steam-enroll-error").textContent = error.message;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = label;
+  }
+}
+
 function setQrMessage(message, success = false) {
   const output = $("#qr-error");
   output.textContent = message;
@@ -579,6 +643,8 @@ $("#import-button").onclick = openImport;
 $("#empty-import").onclick = openImport;
 $("#add-totp-button").onclick = openAddTotp;
 $("#empty-add-totp").onclick = openAddTotp;
+$("#add-steam-button")?.addEventListener("click", openSteamEnrollment);
+$("#empty-add-steam")?.addEventListener("click", openSteamEnrollment);
 $("#qr-camera-button").onclick = () => {
   if (qrStream) {
     stopQrCamera();
@@ -673,6 +739,45 @@ $("#import-form").onsubmit = async (event) => {
   } catch (error) { $("#import-error").textContent = error.message; }
   finally { submit.disabled = false; }
 };
+
+$("#steam-enroll-login-form")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = event.submitter;
+  const data = Object.fromEntries(new FormData(form));
+  steamEnrollmentRequest("/api/steam/enroll", data, submit).finally(() => {
+    form.elements.password.value = "";
+  });
+});
+$("#steam-enroll-challenge-form")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = { flow: enrollmentFlow };
+  if (!$("#steam-enroll-code-field").hidden) data.code = form.elements.code.value.trim();
+  steamEnrollmentRequest("/api/steam/enroll/continue", data, event.submitter);
+});
+$("#steam-enroll-activation-form")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  steamEnrollmentRequest("/api/steam/enroll/activate", {
+    flow: enrollmentFlow,
+    code: form.elements.code.value.trim(),
+  }, event.submitter);
+});
+$("#steam-enroll-dialog")?.addEventListener("close", () => {
+  const flow = enrollmentFlow;
+  enrollmentFlow = null;
+  $("#steam-enroll-login-form").reset();
+  $("#steam-enroll-challenge-form").reset();
+  $("#steam-enroll-activation-form").reset();
+  $("#steam-recovery-code").textContent = "";
+  if (flow) {
+    json("/api/steam/enroll", {
+      method: "DELETE",
+      body: JSON.stringify({ flow }),
+    }).catch((error) => toast(error.message, true));
+  }
+});
 
 $("#search").oninput = renderAccounts;
 $("#privacy-button").onclick = () => {

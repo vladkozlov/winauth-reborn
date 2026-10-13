@@ -48,6 +48,10 @@ def test_valid_basic_auth(client, auth, path):
         ("post", "/api/accounts/missing/steam/session"),
         ("delete", "/api/accounts/missing/steam/session"),
         ("post", "/api/accounts/missing/steam/confirmations/1"),
+        ("post", "/api/steam/enroll"),
+        ("post", "/api/steam/enroll/continue"),
+        ("post", "/api/steam/enroll/activate"),
+        ("delete", "/api/steam/enroll"),
     ],
 )
 @pytest.mark.parametrize("token", [None, "forged-token"])
@@ -351,6 +355,66 @@ def test_steam_api_email_challenge_and_cookie_fallback(
     assert vault.get(steam_record["id"])["steam_session"]["steam_login_secure"].endswith(
         "%7C%7Ctest-cookie-token"
     )
+
+
+def test_steam_enrollment_api_delegates_challenges_and_activation(
+    app,
+    client,
+    write_headers,
+    monkeypatch,
+):
+    service = app.extensions["steam"]
+    start = Mock(return_value={"flow": "enrollment-token", "needs_code": True})
+    continue_flow = Mock(return_value={"flow": "enrollment-token", "needs_activation": True})
+    activate = Mock(return_value={"added": True, "recovery_code": "R-SYNTHETIC"})
+    cancel = Mock()
+    monkeypatch.setattr(service, "start_enrollment", start)
+    monkeypatch.setattr(service, "continue_enrollment", continue_flow)
+    monkeypatch.setattr(service, "activate_enrollment", activate)
+    monkeypatch.setattr(service, "cancel_enrollment", cancel)
+
+    response = client.post(
+        "/api/steam/enroll",
+        headers=write_headers,
+        json={"username": "fixture-user", "password": "fixture-password"},
+    )
+    assert response.json == {"flow": "enrollment-token", "needs_code": True}
+    start.assert_called_once_with("fixture-user", "fixture-password")
+    response = client.post(
+        "/api/steam/enroll/continue",
+        headers=write_headers,
+        json={"flow": "enrollment-token", "code": "ABCDE"},
+    )
+    assert response.json == {"flow": "enrollment-token", "needs_activation": True}
+    continue_flow.assert_called_once_with("enrollment-token", "ABCDE")
+    response = client.post(
+        "/api/steam/enroll/activate",
+        headers=write_headers,
+        json={"flow": "enrollment-token", "code": "SMS123"},
+    )
+    assert response.json == {"added": True, "recovery_code": "R-SYNTHETIC"}
+    activate.assert_called_once_with(
+        "enrollment-token", "SMS123", app.extensions["vault"]
+    )
+    assert client.delete(
+        "/api/steam/enroll",
+        headers=write_headers,
+        json={"flow": "enrollment-token"},
+    ).json == {"ok": True}
+    cancel.assert_called_once_with("enrollment-token")
+
+
+@pytest.mark.parametrize(
+    "path,payload",
+    [
+        ("/api/steam/enroll", {"username": "user"}),
+        ("/api/steam/enroll/continue", {"flow": "token", "code": 123}),
+        ("/api/steam/enroll/activate", {"flow": "token", "code": ""}),
+    ],
+)
+def test_steam_enrollment_api_rejects_invalid_fields(client, write_headers, path, payload):
+    response = client.post(path, headers=write_headers, json=payload)
+    assert response.status_code == 400
 
 
 def test_failed_cookie_validation_does_not_save_session(

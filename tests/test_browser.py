@@ -13,6 +13,7 @@ from playwright.sync_api import expect, sync_playwright
 from werkzeug.serving import make_server
 
 from winauth_reborn.app import create_app
+from winauth_reborn.authenticators import parse_export
 
 SAMPLE = (
     "# Synthetic fixtures only\n"
@@ -48,6 +49,31 @@ def live_app(tmp_path):
     steam.login = lambda *args: {
         "session": {"steam_id": "76561198000000000", "steam_login_secure": "synthetic-cookie"}
     }
+    steam.start_enrollment = lambda username, password: {
+        "flow": "synthetic-enrollment",
+        "needs_code": True,
+        "message": "Enter the email code.",
+    }
+    steam.continue_enrollment = lambda flow, code: {
+        "flow": flow,
+        "needs_activation": True,
+        "phone_hint": "***1234",
+    }
+
+    def activate_enrollment(flow, code, vault):
+        record = parse_export(
+            "otpauth://totp/Steam:synthetic-trader?secret=JBSWY3DPEHPK3PXP"
+            "&digits=5&data=%7B%22identity_secret%22%3A%22aWRlbnRpdHktc2VjcmV0%22%7D"
+        )[0]
+        vault.import_records([record])
+        state["enrollment"] = (flow, code)
+        return {
+            "added": True,
+            "account_name": "synthetic-trader",
+            "recovery_code": "R-SYNTHETIC-ONLY",
+        }
+
+    steam.activate_enrollment = activate_enrollment
 
     def confirmations(record, operation=None, confirmation_id=None, nonce=None):
         if operation:
@@ -254,6 +280,26 @@ def test_steam_login_review_approve_and_disconnect(browser_page, live_app):
     page.get_by_role("button", name="Confirmations").click()
     expect(page.locator("#steam-connect")).to_be_visible()
     expect(page.locator('#steam-login-form [name="password"]')).to_have_value("")
+
+
+def test_add_steam_account_login_challenge_and_sms_activation(browser_page, live_app):
+    page = browser_page
+    page.get_by_role("button", name="Add a Steam account", exact=True).click()
+    page.locator('#steam-enroll-login-form [name="username"]').fill("synthetic-trader")
+    page.locator('#steam-enroll-login-form [name="password"]').fill("synthetic-password")
+    page.get_by_role("button", name="Sign in to Steam", exact=True).click()
+    expect(page.locator("#steam-enroll-challenge")).to_be_visible()
+    expect(page.locator('#steam-enroll-login-form [name="password"]')).to_have_value("")
+    page.locator('#steam-enroll-challenge-form [name="code"]').fill("EMAIL1")
+    page.get_by_role("button", name="Continue login", exact=True).click()
+    expect(page.locator("#steam-enroll-activation")).to_be_visible()
+    expect(page.locator("#steam-enroll-phone")).to_contain_text("***1234")
+    page.locator('#steam-enroll-activation-form [name="code"]').fill("SMS123")
+    page.get_by_role("button", name="Activate Steam Guard", exact=True).click()
+    expect(page.locator("#steam-enroll-success")).to_be_visible()
+    expect(page.locator("#steam-recovery-code")).to_have_text("R-SYNTHETIC-ONLY")
+    expect(page.locator(".account-card")).to_have_count(1)
+    assert live_app[1]["enrollment"] == ("synthetic-enrollment", "SMS123")
 
 
 def test_mobile_invalid_import_export_and_delete(browser_page, tmp_path):
