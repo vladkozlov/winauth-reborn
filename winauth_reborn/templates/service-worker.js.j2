@@ -4,16 +4,30 @@ const PREFIX = `winauth:${self.registration.scope}:${MODE}:`;
 const CACHE = PREFIX + {{ fingerprint | tojson }};
 const ASSETS = {{ assets | tojson }}.map((path) => new URL(path, self.registration.scope).href);
 const ALLOWED = new Set(ASSETS);
+const deleteOldCaches = async () => {
+  let emptyPasses = 0;
+  for (let attempt = 0; attempt < 10 && emptyPasses < 3; attempt++) {
+    const oldCaches = (await caches.keys()).filter((name) => name.startsWith(PREFIX) && name !== CACHE);
+    if (oldCaches.length) {
+      emptyPasses = 0;
+      await Promise.all(oldCaches.map((name) => caches.delete(name)));
+    } else {
+      emptyPasses++;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  if ((await caches.keys()).some((name) => name.startsWith(PREFIX) && name !== CACHE)) {
+    throw new Error("Could not remove outdated app caches during activation.");
+  }
+};
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) =>
     cache.addAll(ASSETS.map((url) => new Request(url, { cache: "reload", credentials: "same-origin" })))));
 });
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    for (const name of await caches.keys()) {
-      if (name.startsWith(PREFIX) && name !== CACHE) await caches.delete(name);
-    }
     await self.clients.claim();
+    await deleteOldCaches();
   })());
 });
 self.addEventListener("message", (event) => {
