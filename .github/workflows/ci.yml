@@ -28,7 +28,7 @@ jobs:
         run: |
           ruff check .
           ruff format --check .
-          node --check winauth_reborn/static/app.js
+          for script in winauth_reborn/static/*.js; do node --check "$script"; done
       - name: Run backend and browser tests
         run: python -m pytest -q
       - name: Build distribution

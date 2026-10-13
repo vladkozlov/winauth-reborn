@@ -6,12 +6,21 @@ let accounts = [];
 let loadedAt = performance.now();
 let hiddenCodes = false;
 let steamOnly = false;
-let loading = false;
+let pinnedOnly = false;
+let loadingPromise = null;
+let settings = null;
+let activeEdit = null;
+let editorIcon = "initial";
+let editorImage = "";
+let recoveryAccount = null;
+let recoveryTimer;
+let recoveryGeneration = 0;
+let lastActivity = performance.now();
 let activeSteam = null;
 let emailFlow = null;
 let toastTimer;
-let generation = 0;
 const hotpCodes = new Map();
+const defaults = { theme: "dark", density: "comfortable", hide_codes: false, sort_order: "imported", auto_hide_seconds: 0 };
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -50,7 +59,7 @@ function toast(message, error = false) {
   toastTimer = setTimeout(() => { $("#toast").hidden = true; }, 3500);
 }
 
-async function copy(text) {
+async function copy(text, message = "Code copied to clipboard") {
   if (!navigator.clipboard || !window.isSecureContext) {
     throw new Error("Clipboard access requires HTTPS or localhost. Select the code and copy manually.");
   }
@@ -59,7 +68,41 @@ async function copy(text) {
   } catch {
     throw new Error("Clipboard permission was denied. Allow clipboard access or copy manually.");
   }
-  toast("Code copied to clipboard");
+  toast(message);
+}
+
+function setPrivacy(hidden) {
+  hiddenCodes = hidden;
+  $("#privacy-button").textContent = hidden ? "Show codes" : "Hide codes";
+  $("#privacy-button").setAttribute("aria-pressed", String(hidden));
+  updateCards();
+}
+
+function applySettings(next, forcePrivacy = false) {
+  const changed = !settings || JSON.stringify(next) !== JSON.stringify(settings);
+  if (!changed && !forcePrivacy) return;
+  if (forcePrivacy || !settings || settings.hide_codes !== next.hide_codes) setPrivacy(next.hide_codes);
+  settings = next;
+  document.documentElement.dataset.theme = next.theme;
+  document.documentElement.dataset.density = next.density;
+  renderAccounts();
+}
+
+function serviceIcon(account) {
+  const container = element("div", `service-icon ${account.kind === "steam" ? "steam" : ""}`);
+  if (account.icon === "custom" && account.custom_icon) {
+    const image = element("img");
+    image.src = account.custom_icon;
+    image.alt = "";
+    container.append(image);
+  } else if (account.icon && account.icon !== "initial") {
+    const glyph = element("span", `glyph icon-${account.icon}`);
+    glyph.setAttribute("aria-hidden", "true");
+    container.append(glyph);
+  } else {
+    container.textContent = (account.issuer || account.name).slice(0, 1).toUpperCase();
+  }
+  return container;
 }
 
 function confirmAction(title, message, action, dangerous = false) {
@@ -94,14 +137,36 @@ function shownCode(account) {
 function accountCard(account) {
   const card = element("article", "account-card");
   card.dataset.id = account.id;
+  card.classList.toggle("is-pinned", account.pinned);
+  card.style.setProperty("--card-color", account.color);
   const heading = element("div", "card-heading");
-  heading.append(element("div", `service-icon ${account.kind === "steam" ? "steam" : ""}`,
-    (account.issuer || account.name).slice(0, 1).toUpperCase()));
+  heading.append(serviceIcon(account));
   const name = element("div", "card-name");
   const title = element("h3", "", account.name);
   title.title = account.name;
   name.append(title, element("p", "", account.issuer || "Authenticator"));
   heading.append(name);
+  const actions = element("div", "card-actions");
+  const pin = element("button", `card-action pin-button ${account.pinned ? "selected" : ""}`);
+  pin.append(element("span", "glyph icon-star"));
+  pin.setAttribute("aria-label", `${account.pinned ? "Unpin" : "Pin"} ${account.name}`);
+  pin.setAttribute("aria-pressed", String(account.pinned));
+  pin.title = account.pinned ? "Unpin card" : "Pin card";
+  pin.onclick = async () => {
+    pin.disabled = true;
+    try {
+      await json(`/api/accounts/${account.id}`, {
+        method: "PATCH", body: JSON.stringify({ pinned: !account.pinned }),
+      });
+      await loadAccounts(true);
+    } catch (error) { toast(error.message, true); }
+    finally { pin.disabled = false; }
+  };
+  const edit = element("button", "card-action edit-button", "\u270e");
+  edit.setAttribute("aria-label", `Edit ${account.name}`);
+  edit.title = "Edit authenticator";
+  edit.onclick = () => openEditor(accounts.find((item) => item.id === account.id) || account);
+  actions.append(pin, edit);
   const remove = element("button", "delete-button", "\u00d7");
   remove.setAttribute("aria-label", `Delete ${account.name}`);
   remove.onclick = async () => {
@@ -113,7 +178,8 @@ function accountCard(account) {
       toast("Authenticator removed");
     } catch (error) { toast(error.message, true); }
   };
-  heading.append(remove);
+  actions.append(remove);
+  heading.append(actions);
   const codeRow = element("div", "code-row");
   const code = element("button", "code", shownCode(account));
   const copyButton = element("button", "copy-button", "Copy");
@@ -150,10 +216,15 @@ function accountCard(account) {
   footer.append(element("span", "kind-badge",
     account.kind === "steam" ? "Steam Guard" : account.kind === "hotp" ? "Counter-based" : "Time-based"));
   if (account.kind === "steam") {
+    const links = element("div", "card-links");
+    const recovery = element("button", "steam-button", "Recovery details");
+    recovery.onclick = () => openRecovery(account);
+    links.append(recovery);
     const steamButton = element("button", "steam-button",
       account.confirmations_available ? "Confirmations \u2192" : "Missing confirmation data");
     steamButton.onclick = () => openSteam(accounts.find((item) => item.id === account.id) || account);
-    footer.append(steamButton);
+    links.append(steamButton);
+    footer.append(links);
   } else if (account.kind === "hotp") {
     const next = element("button", "steam-button", "Generate next \u2192");
     next.onclick = async () => {
@@ -176,7 +247,15 @@ function renderAccounts() {
   const query = $("#search").value.trim().toLowerCase();
   const filtered = accounts.filter((account) =>
     (!steamOnly || account.kind === "steam") &&
+    (!pinnedOnly || account.pinned) &&
     `${account.name} ${account.issuer}`.toLowerCase().includes(query));
+  filtered.sort((left, right) => {
+    const pinned = Number(right.pinned) - Number(left.pinned);
+    if (pinned) return pinned;
+    const key = settings?.sort_order;
+    return key === "name" || key === "issuer"
+      ? left[key].localeCompare(right[key], undefined, { sensitivity: "base" }) : 0;
+  });
   $("#accounts").replaceChildren(...filtered.map(accountCard));
   $("#empty-state").hidden = accounts.length !== 0;
   $("#no-results").hidden = accounts.length === 0 || filtered.length !== 0;
@@ -206,21 +285,40 @@ function updateCards() {
       card.querySelector(".remaining").textContent = `${Math.ceil(remaining)}s`;
     }
   }
+  if (recoveryAccount && $("#recovery-dialog").open) {
+    const account = accounts.find((item) => item.id === recoveryAccount);
+    const value = $("#recovery-fields [data-field='guard_code']");
+    const button = $("#recovery-fields [data-copy='guard_code']");
+    if (value && account) {
+      const fresh = account.remaining - elapsed > 0;
+      value.value = fresh ? account.code : "---";
+      button.disabled = !fresh;
+    }
+  }
 }
 
-async function loadAccounts(forceRender = false) {
-  if (loading) return;
-  loading = true;
-  const sequence = ++generation;
+function loadAccounts(forceRender = false) {
+  if (loadingPromise) {
+    return forceRender ? loadingPromise.then(() => loadAccounts(true)) : loadingPromise;
+  }
+  loadingPromise = refreshAccounts(forceRender).finally(() => { loadingPromise = null; });
+  return loadingPromise;
+}
+
+function cardMetadata(account) {
+  const { code, remaining, ...metadata } = account;
+  return JSON.stringify(metadata);
+}
+
+async function refreshAccounts(forceRender) {
   try {
     const data = await json("/api/accounts");
-    if (sequence !== generation) return;
     const changed = forceRender || data.accounts.length !== accounts.length ||
-      data.accounts.some((item, index) =>
-        item.id !== accounts[index]?.id || item.counter !== accounts[index]?.counter ||
-        item.steam_connected !== accounts[index]?.steam_connected);
+      data.accounts.some((item, index) => !accounts[index] ||
+        cardMetadata(item) !== cardMetadata(accounts[index]));
     accounts = data.accounts;
     loadedAt = performance.now();
+    applySettings(data.settings);
     $("#connection-error").hidden = true;
     $("#refresh-status").textContent = "Vault connected";
     $("#accounts").setAttribute("aria-busy", "false");
@@ -231,7 +329,7 @@ async function loadAccounts(forceRender = false) {
     $("#connection-error").hidden = false;
     $("#refresh-status").textContent = "Connection interrupted";
     $("#accounts").setAttribute("aria-busy", "false");
-  } finally { loading = false; }
+  }
 }
 
 function openImport() {
@@ -290,10 +388,12 @@ $("#import-form").onsubmit = async (event) => {
 
 $("#search").oninput = renderAccounts;
 $("#privacy-button").onclick = () => {
-  hiddenCodes = !hiddenCodes;
-  $("#privacy-button").textContent = hiddenCodes ? "Show codes" : "Hide codes";
-  $("#privacy-button").setAttribute("aria-pressed", String(hiddenCodes));
-  updateCards();
+  setPrivacy(!hiddenCodes);
+};
+$("#pinned-filter").onclick = () => {
+  pinnedOnly = !pinnedOnly;
+  $("#pinned-filter").setAttribute("aria-pressed", String(pinnedOnly));
+  renderAccounts();
 };
 function setFilter(steam) {
   steamOnly = steam;
@@ -462,9 +562,27 @@ $("#steam-dialog").addEventListener("close", () => {
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) loadAccounts();
+  else {
+    clearRecovery();
+    $("#recovery-dialog").close();
+    if (settings?.auto_hide_seconds) setPrivacy(true);
+  }
+});
+for (const event of ["pointerdown", "pointermove", "keydown", "scroll"]) {
+  document.addEventListener(event, () => { lastActivity = performance.now(); }, { passive: true });
+}
+document.addEventListener("keydown", (event) => {
+  if (event.ctrlKey || event.metaKey || event.altKey || document.querySelector("dialog[open]") ||
+      event.target.closest("input, textarea, select, [contenteditable]")) return;
+  if (event.key === "/") { event.preventDefault(); $("#search").focus(); }
+  else if (event.key.toLowerCase() === "h") setPrivacy(!hiddenCodes);
+  else if (event.key === ",") { event.preventDefault(); openSettings(); }
 });
 setInterval(() => {
+  if (settings?.auto_hide_seconds && performance.now() - lastActivity > settings.auto_hide_seconds * 1000) {
+    setPrivacy(true);
+  }
   updateCards();
   if (!document.hidden) loadAccounts();
 }, 1000);
-loadAccounts(true);
+document.addEventListener("DOMContentLoaded", () => loadAccounts(true));

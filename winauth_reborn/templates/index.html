@@ -8,6 +8,9 @@
   <title>WinAuth Reborn</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='editor.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='settings.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='recovery.js') }}" defer></script>
 </head>
 <body>
   <aside class="sidebar">
@@ -28,6 +31,7 @@
     <header class="topbar">
       <div><span class="eyebrow">A FRESH START FOR YOUR AUTHENTICATORS</span><h1>Your codes, one place.</h1></div>
       <div class="header-actions">
+        <button class="button secondary icon-only" id="settings-button" aria-label="Settings" title="Settings">&#9881;</button>
         <button class="button secondary" id="privacy-button" aria-pressed="false">Hide codes</button>
         <button class="button primary" id="import-button"><span aria-hidden="true">+</span> Import authenticators</button>
       </div>
@@ -39,6 +43,7 @@
     </section>
     <div class="toolbar">
       <label class="search"><span aria-hidden="true">&#8981;</span><input id="search" type="search" placeholder="Search accounts or services..." aria-label="Search authenticators"></label>
+      <button class="button secondary small" id="pinned-filter" aria-pressed="false">Pinned only</button>
       <span class="muted" id="results-label">Loading your vault...</span>
     </div>
     <div id="connection-error" class="banner error" role="alert" hidden></div>
@@ -99,6 +104,70 @@
       <p class="banner">Review the recipient and summary carefully. Approving may authorize a trade or market listing. Nothing is approved automatically.</p>
       <div id="confirmations"></div>
     </section>
+  </dialog>
+
+  <dialog id="edit-dialog" class="wide-dialog" aria-labelledby="edit-title">
+    <div class="dialog-heading"><div><span class="eyebrow">MAKE IT YOURS</span><h2 id="edit-title">Edit authenticator</h2></div><button class="close-button" data-close aria-label="Close editor">&times;</button></div>
+    <form id="edit-form">
+      <div class="field-grid">
+        <label class="field">Account name<input name="name" required maxlength="200" autocomplete="off"></label>
+        <label class="field">Service / issuer<input name="issuer" maxlength="200" autocomplete="off"></label>
+      </div>
+      <div class="editor-preview"><div id="edit-icon-preview" class="service-icon"></div><div><strong id="edit-name-preview"></strong><small class="muted">Your card, your style</small></div></div>
+      <fieldset class="appearance-field"><legend>Card icon</legend><div class="icon-picker">
+        {% for icon in icons if icon != 'custom' %}
+        <button type="button" class="icon-option" data-icon="{{ icon }}" aria-label="{{ icon | replace('-', ' ') }}" aria-pressed="false" title="{{ icon | replace('-', ' ') }}">
+          {% if icon == 'initial' %}Aa{% else %}<span class="glyph icon-{{ icon }}" aria-hidden="true"></span>{% endif %}
+        </button>
+        {% endfor %}
+        <button type="button" class="icon-option" data-icon="custom" aria-label="Custom uploaded icon" aria-pressed="false" hidden><img id="custom-icon-preview" alt=""></button>
+      </div></fieldset>
+      <label class="field">Upload your own icon<input id="edit-icon-file" type="file" accept="image/png,image/jpeg,image/webp"><span class="muted">PNG, JPEG or WebP, up to 128 KB. Images are resized and metadata is removed.</span></label>
+      <label class="field">Card color<input name="color" id="edit-color" type="color" value="#b4ef82"></label>
+      <div class="color-presets" aria-label="Color presets">
+        <button type="button" data-color="#b4ef82" aria-label="Green"></button><button type="button" data-color="#8ebfff" aria-label="Blue"></button><button type="button" data-color="#c9b8ff" aria-label="Purple"></button><button type="button" data-color="#ffb284" aria-label="Orange"></button><button type="button" data-color="#f59ec7" aria-label="Pink"></button><button type="button" data-color="#72d9ca" aria-label="Teal"></button>
+      </div>
+      <label class="check-field"><input name="pinned" type="checkbox"> Pin this card to the top</label>
+      <details id="edit-advanced" class="cookie-details"><summary>Authenticator parameters</summary>
+        <p class="banner">Changing these values does not update the service. Only enter the values provided by that service; an incorrect secret or period will produce unusable codes.</p>
+        <label class="field">Replace secret (Base32)<input name="secret" type="password" autocomplete="new-password" placeholder="Leave empty to keep the existing secret"><span class="muted">The current secret is never loaded into this editor.</span></label>
+        <div class="field-grid">
+          <label class="field">Algorithm<select name="algorithm"><option>SHA1</option><option>SHA256</option><option>SHA512</option></select></label>
+          <label class="field">Digits<input name="digits" type="number" min="5" max="10" required></label>
+          <label class="field">Period (seconds)<input name="period" type="number" min="1" max="86400" required></label>
+        </div>
+      </details>
+      <p id="edit-readonly-note" class="muted" hidden>Steam key parameters stay read-only to protect your imported identity and active session. Use Recovery details to view the Steam Guard secret.</p>
+      <div id="edit-error" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close>Cancel</button><button class="button primary" type="submit">Save changes</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="settings-dialog" aria-labelledby="settings-title">
+    <div class="dialog-heading"><div><span class="eyebrow">YOUR PREFERENCES</span><h2 id="settings-title">Settings</h2></div><button class="close-button" data-close aria-label="Close settings">&times;</button></div>
+    <p class="muted">Saved in your encrypted vault and shared across your devices. This is a single-owner workspace.</p>
+    <form id="settings-form">
+      <div class="field-grid">
+        <label class="field">Theme<select name="theme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">Follow system</option></select></label>
+        <label class="field">Card density<select name="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+      </div>
+      <label class="field">Card order<select name="sort_order"><option value="imported">Import order</option><option value="name">Account name</option><option value="issuer">Service / issuer</option></select><span class="muted">Pinned cards always appear first.</span></label>
+      <label class="check-field"><input name="hide_codes" type="checkbox"> Hide codes by default when opening the app</label>
+      <label class="field">Hide codes when idle<select name="auto_hide_seconds"><option value="0">Never</option><option value="30">After 30 seconds</option><option value="60">After 1 minute</option><option value="300">After 5 minutes</option></select></label>
+      <p class="banner">Keyboard shortcuts: <kbd>/</kbd> search, <kbd>H</kbd> hide/show codes, <kbd>,</kbd> settings. Shortcuts do not trigger while typing or inside a dialog.</p>
+      <p class="muted">Basic Auth credentials remain in your server's .env configuration. Recovery details clear after 60 seconds or when the page is hidden.</p>
+      <div id="settings-error" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button class="button secondary" type="button" id="reset-settings">Restore defaults</button><button class="button primary" type="submit">Save settings</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="recovery-dialog" class="wide-dialog" aria-labelledby="recovery-title">
+    <div class="dialog-heading"><div><span class="eyebrow">SENSITIVE AUTHENTICATOR DATA</span><h2 id="recovery-title">Steam Guard &amp; recovery</h2></div><button class="close-button" data-close aria-label="Close recovery details">&times;</button></div>
+    <p id="recovery-account" class="muted"></p>
+    <p class="banner">Keep these secrets private. The recovery code can remove your authenticator. Details disappear after 60 seconds, when closed, or when this page is hidden.</p>
+    <div id="recovery-fields"></div>
+    <div id="recovery-error" class="form-error" role="alert"></div>
+    <div class="dialog-actions"><button class="button secondary" data-close>Close and clear</button></div>
   </dialog>
 
   <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title">

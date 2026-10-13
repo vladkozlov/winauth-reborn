@@ -1,10 +1,12 @@
 """Real-browser checks with synthetic authenticators and a mocked Steam service."""
 
+import io
 import json
 import threading
 from urllib.parse import quote
 
 import pytest
+from PIL import Image
 from playwright.sync_api import expect, sync_playwright
 from werkzeug.serving import make_server
 
@@ -15,7 +17,15 @@ SAMPLE = (
     "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example\n"
     "otpauth://hotp/Counter:bob?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&counter=0\n"
     "otpauth://totp/Steam:trader?secret=JBSWY3DPEHPK3PXP&digits=5&deviceid=android:test"
-    "&data=" + quote(json.dumps({"identity_secret": "aWRlbnRpdHktc2VjcmV0"}))
+    "&data="
+    + quote(
+        json.dumps(
+            {
+                "identity_secret": "aWRlbnRpdHktc2VjcmV0",
+                "revocation_code": "R-SYNTHETIC-ONLY",
+            }
+        )
+    )
 )
 
 
@@ -185,3 +195,127 @@ def test_mobile_invalid_import_export_and_delete(browser_page, tmp_path):
     page.get_by_role("button", name="Delete alice", exact=True).click()
     page.locator("#confirm-ok").click()
     expect(page.locator(".account-card")).to_have_count(2)
+
+
+def test_card_editor_icons_colors_pins_and_custom_upload(browser_page, live_app):
+    page = browser_page
+    import_sample(page)
+    page.get_by_role("button", name="Pin trader", exact=True).click()
+    expect(page.locator(".account-card").first.locator("h3")).to_have_text("trader")
+    page.locator("#pinned-filter").click()
+    expect(page.locator(".account-card")).to_have_count(1)
+    page.locator("#pinned-filter").click()
+    page.get_by_role("button", name="Edit alice", exact=True).click()
+    expect(page.locator('#edit-form [name="secret"]')).to_have_value("")
+    page.locator('#edit-form [name="name"]').fill("Work account")
+    page.locator('#edit-form [name="issuer"]').fill("GitHub")
+    page.locator('[data-icon="shield-check"]').click()
+    page.get_by_role("button", name="Blue", exact=True).click()
+    page.locator('#edit-form [name="pinned"]').check()
+    page.locator("#edit-advanced summary").click()
+    page.locator('#edit-form [name="period"]').fill("45")
+    page.get_by_role("button", name="Save changes", exact=True).click()
+    card = page.locator(".account-card").filter(
+        has=page.get_by_role("heading", name="Work account")
+    )
+    expect(card.locator(".icon-shield-check")).to_be_visible()
+    expect(card.get_by_role("button", name="Unpin Work account")).to_have_attribute(
+        "aria-pressed", "true"
+    )
+    record = next(r for r in live_app[0].extensions["vault"].list() if r["name"] == "Work account")
+    assert record["period"] == 45 and record["color"] == "#8ebfff"
+    page.reload()
+    expect(card.locator(".icon-shield-check")).to_be_visible()
+    card.get_by_role("button", name="Edit Work account").click()
+    output = io.BytesIO()
+    Image.new("RGB", (32, 32), "red").save(output, format="PNG")
+    page.locator("#edit-icon-file").set_input_files(
+        {
+            "name": "custom.png",
+            "mimeType": "image/png",
+            "buffer": output.getvalue(),
+        }
+    )
+    expect(page.locator('[data-icon="custom"]')).to_have_attribute("aria-pressed", "true")
+    page.get_by_role("button", name="Save changes", exact=True).click()
+    expect(card.locator(".service-icon img")).to_be_visible()
+    page.get_by_role("button", name="Unpin trader", exact=True).click()
+    expect(page.locator(".account-card").first.locator("h3")).to_have_text("Work account")
+
+
+def test_preferences_themes_compact_privacy_sort_and_shortcuts(browser_page):
+    page = browser_page
+    import_sample(page)
+    page.locator("#settings-button").click()
+    page.locator('#settings-form [name="theme"]').select_option("light")
+    page.locator('#settings-form [name="density"]').select_option("compact")
+    page.locator('#settings-form [name="sort_order"]').select_option("name")
+    page.locator('#settings-form [name="hide_codes"]').check()
+    page.get_by_role("button", name="Save settings", exact=True).click()
+    expect(page.locator("html")).to_have_attribute("data-theme", "light")
+    expect(page.locator("html")).to_have_attribute("data-density", "compact")
+    expect(page.locator(".account-card").first.locator(".code")).to_have_text("••••••")
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(245, 247, 245)"
+    page.reload()
+    expect(page.locator(".account-card")).to_have_count(3)
+    expect(page.locator(".account-card").first.locator(".code")).to_have_text("••••••")
+    page.locator("h1").click()
+    page.keyboard.press("h")
+    expect(page.locator("#privacy-button")).to_have_attribute("aria-pressed", "false")
+    page.keyboard.press("/")
+    expect(page.locator("#search")).to_be_focused()
+    page.locator("#search").fill("h")
+    expect(page.locator("#privacy-button")).to_have_attribute("aria-pressed", "false")
+    page.locator("#search").fill("")
+    page.locator("h1").click()
+    page.keyboard.press(",")
+    expect(page.locator("#settings-dialog")).to_be_visible()
+    page.locator('#settings-form [name="theme"]').select_option("system")
+    page.get_by_role("button", name="Save settings", exact=True).click()
+    expect(page.locator("html")).to_have_attribute("data-theme", "system")
+    page.emulate_media(color_scheme="dark")
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(16, 18, 20)"
+    page.emulate_media(color_scheme="light")
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(245, 247, 245)"
+
+
+def test_recovery_is_revealed_only_after_confirmation_and_cleared(browser_page):
+    page = browser_page
+    import_sample(page)
+    page.get_by_role("button", name="Recovery details", exact=True).click()
+    expect(page.locator("#recovery-dialog")).not_to_be_visible()
+    page.locator("#confirm-cancel").click()
+    assert "R-SYNTHETIC-ONLY" not in page.content()
+    page.get_by_role("button", name="Recovery details", exact=True).click()
+    page.locator("#confirm-ok").click()
+    expect(page.locator('[data-field="recovery_code"]')).to_have_value("R-SYNTHETIC-ONLY")
+    page.get_by_role("button", name="Copy Recovery / revocation code", exact=True).click()
+    assert page.evaluate("navigator.clipboard.readText()") == "R-SYNTHETIC-ONLY"
+    page.get_by_role("button", name="Close recovery details", exact=True).click()
+    expect(page.locator("#recovery-fields")).to_be_empty()
+
+
+def test_idle_privacy_and_recovery_timeout(browser_page):
+    page = browser_page
+    page.clock.install()
+    import_sample(page)
+    page.locator("#settings-button").click()
+    page.locator('#settings-form [name="auto_hide_seconds"]').select_option("30")
+    page.get_by_role("button", name="Save settings", exact=True).click()
+    expect(page.locator("#settings-dialog")).not_to_be_visible()
+    page.clock.fast_forward(31000)
+    expect(page.locator("#privacy-button")).to_have_attribute("aria-pressed", "true")
+    page.get_by_role("button", name="Recovery details", exact=True).click()
+    page.locator("#confirm-ok").click()
+    expect(page.locator('[data-field="recovery_code"]')).to_be_visible()
+    page.clock.fast_forward(61000)
+    expect(page.locator("#recovery-dialog")).not_to_be_visible()
+    expect(page.locator("#recovery-fields")).to_be_empty()
+    page.get_by_role("button", name="Recovery details", exact=True).click()
+    page.locator("#confirm-ok").click()
+    expect(page.locator('[data-field="recovery_code"]')).to_be_visible()
+    page.evaluate(
+        "Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange'))"
+    )
+    expect(page.locator("#recovery-dialog")).not_to_be_visible()
+    expect(page.locator("#recovery-fields")).to_be_empty()
