@@ -27,10 +27,11 @@ fixtures and a minimal reproduction instead.
   vault data; mutations remain CSRF-protected.
 - Optional PIN unlock stores an AES-GCM-encrypted credential envelope in
   localStorage, using PBKDF2-SHA256 with 600,000 iterations and an origin binding.
-  The PIN is never sent to the server or saved. Use it only on trusted devices:
-  stolen envelopes allow offline PIN guessing, and a compromised browser can
-  capture decrypted credentials. It is not two-factor authentication; client
-  retry delays are not a security boundary.
+  The four-digit PIN is never sent to the server or saved. It has only 10,000
+  possible values: use it only on trusted devices, since stolen envelopes allow
+  offline PIN guessing and a compromised browser can capture decrypted
+  credentials. It is not two-factor authentication; client retry delays are
+  not a security boundary.
 - Lock signs out that browser, not other devices or API clients. It suppresses
   cached Basic credentials only while its signed lock cookie remains valid.
   Forgetting a saved login deletes the local envelope, not server credentials.

@@ -69,9 +69,9 @@ environment are **server configuration**, never sent to the browser.
 ### Remember this browser with a PIN
 
 On the login page, enable **Remember this browser with a PIN** and choose a
-6-12 digit PIN. Future visits can unlock using that PIN instead of retyping your
+four-digit PIN. Future visits can unlock using that PIN instead of retyping your
 server credentials. This requires **HTTPS or localhost** and Web Crypto support.
-Use a long, random PIN and only enable it on a trusted device.
+A four-digit PIN is only a convenience; only enable it on a trusted device.
 
 The browser stores an **encrypted credential envelope**, not plaintext credentials
 or the PIN: AES-GCM-256 with a random salt/IV and a key derived using

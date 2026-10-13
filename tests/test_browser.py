@@ -348,25 +348,32 @@ def test_encrypted_pin_remember_unlock_wrong_pin_and_forget(browser_page, live_a
     page = browser_page
     page.locator("#lock-button").click()
     expect(page.locator("#password-login-form")).to_be_visible()
-    sign_in(page, pin="80726391")
+    expect(page.locator("#password-login-form .pin-cells span")).to_have_count(8)
+    sign_in(page, pin="8072")
     stored = page.evaluate("localStorage.getItem('winauth.remembered-login.v1')")
     envelope = json.loads(stored)
     assert envelope["version"] == 1 and envelope["iterations"] == 600000
     assert "test-owner" not in stored and "synthetic-browser-test-password" not in stored
-    assert "80726391" not in stored and "password" not in envelope
+    assert "8072" not in stored and "password" not in envelope
     assert page.evaluate("sessionStorage.length") == 0
     page.locator("#lock-button").click()
     expect(page.locator("#pin-view")).to_be_visible()
-    page.locator('#pin-login-form [name="pin"]').fill("11111111")
+    pin_input = page.locator('#pin-login-form [name="pin"]')
+    expect(page.locator("#pin-view .pin-cells span")).to_have_count(4)
+    pin_input.fill("11x1")
+    expect(pin_input).to_have_value("111")
+    pin_input.fill("1111")
     page.get_by_role("button", name="Unlock vault", exact=True).click()
     expect(page.locator("#login-error")).to_contain_text("Incorrect PIN")
+    expect(pin_input).to_have_value("")
+    expect(page.locator("#pin-view .pin-cells")).to_have_text("")
     assert (
         page.evaluate(
             "fetch('/api/accounts', {headers:{'X-Requested-With':'WinAuthReborn'}}).then(response=>response.status)"
         )
         == 401
     )
-    page.locator('#pin-login-form [name="pin"]').fill("80726391")
+    page.locator('#pin-login-form [name="pin"]').fill("8072")
     page.get_by_role("button", name="Unlock vault", exact=True).click()
     expect(page.locator("#empty-state")).to_be_visible()
     origins = page.context.storage_state()["origins"]
@@ -375,7 +382,7 @@ def test_encrypted_pin_remember_unlock_wrong_pin_and_forget(browser_page, live_a
         restored = context.new_page()
         restored.goto(live_app[2])
         expect(restored.locator("#pin-view")).to_be_visible()
-        restored.locator('#pin-login-form [name="pin"]').fill("80726391")
+        restored.locator('#pin-login-form [name="pin"]').fill("8072")
         restored.get_by_role("button", name="Unlock vault", exact=True).click()
         expect(restored.locator("#empty-state")).to_be_visible()
     finally:
@@ -482,8 +489,8 @@ def test_failed_pin_storage_signs_out_instead_of_silently_remembering(browser_pa
     form.locator('[name="username"]').fill("test-owner")
     form.locator('[name="password"]').fill("synthetic-browser-test-password")
     page.locator("#remember-browser").check()
-    form.locator('[name="new_pin"]').fill("80726391")
-    form.locator('[name="confirm_pin"]').fill("80726391")
+    form.locator('[name="new_pin"]').fill("8072")
+    form.locator('[name="confirm_pin"]').fill("8072")
     page.get_by_role("button", name="Sign in", exact=True).click()
     expect(page.locator("#login-error")).to_contain_text("could not save the PIN")
     assert page.evaluate("localStorage.getItem('winauth.remembered-login.v1')") is None

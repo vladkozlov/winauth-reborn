@@ -28,12 +28,12 @@
       <div id="password-view">
         <form id="password-login-form">
           <label class="field">Username<input name="username" autocomplete="username" required maxlength="200"></label>
-          <label class="field">Password<div class="secret-row"><input name="password" type="password" autocomplete="current-password" required maxlength="1000"><button class="button secondary small" type="button" id="show-login-password" aria-pressed="false">Show</button></div></label>
+          <label class="field">Password<div class="secret-row"><input name="password" type="password" autocomplete="current-password" required minlength="6" maxlength="1000"><button class="button secondary small" type="button" id="show-login-password" aria-pressed="false">Show</button></div></label>
           <label class="check-field"><input id="remember-browser" name="remember" type="checkbox"> Remember this browser with a PIN</label>
           <div id="pin-setup" hidden>
-            <label class="field">Create PIN<input name="new_pin" type="password" inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12" autocomplete="off" placeholder="6-12 digits"></label>
-            <label class="field">Confirm PIN<input name="confirm_pin" type="password" inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12" autocomplete="off"></label>
-            <p class="banner">Your credentials are encrypted in this browser using the PIN. Use a long, random PIN on a trusted device. This is a convenience feature, not two-factor authentication.</p>
+            <label class="field">Create PIN<div class="pin-entry"><input class="pin-input" name="new_pin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required><span class="pin-cells" aria-hidden="true"><span></span><span></span><span></span><span></span></span></div></label>
+            <label class="field">Confirm PIN<div class="pin-entry"><input class="pin-input" name="confirm_pin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required><span class="pin-cells" aria-hidden="true"><span></span><span></span><span></span><span></span></span></div></label>
+            <p class="banner">Your credentials are encrypted in this browser using the PIN. This is a convenience feature, not two-factor authentication.</p>
           </div>
           <button class="button primary login-submit" type="submit">Sign in</button>
         </form>
@@ -41,7 +41,7 @@
       </div>
       <div id="pin-view" hidden>
         <form id="pin-login-form">
-          <label class="field">Your PIN<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12" autocomplete="off" required placeholder="Enter your PIN"></label>
+          <label class="field">Your PIN<div class="pin-entry"><input class="pin-input" name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" required><span class="pin-cells" aria-hidden="true"><span></span><span></span><span></span><span></span></span></div></label>
           <button class="button primary login-submit" type="submit">Unlock vault</button>
         </form>
         <button class="text-button" id="use-password" type="button">Use username and password instead &rarr;</button>

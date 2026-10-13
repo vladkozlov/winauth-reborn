@@ -36,7 +36,7 @@
   }
   async function deriveKey(pin, salt) {
     if (!cryptoAvailable) throw new Error("PIN unlock requires HTTPS or localhost and Web Crypto support.");
-    if (!/^[0-9]{6,12}$/.test(pin)) throw new Error("Use a PIN containing 6 to 12 digits.");
+    if (!/^[0-9]{4}$/.test(pin)) throw new Error("Use a PIN containing exactly 4 digits.");
     const material = await crypto.subtle.importKey("raw", encoder.encode(pin), "PBKDF2", false, ["deriveKey"]);
     return crypto.subtle.deriveKey({
       name: "PBKDF2", salt, iterations, hash: "SHA-256",
@@ -104,6 +104,22 @@
     const input = pin ? $('#pin-login-form [name="pin"]') : $('#password-login-form [name="username"]');
     input.focus();
   }
+  function bindPinInput(input) {
+    const cells = input.nextElementSibling.children;
+    const render = () => {
+      input.value = input.value.replace(/[^0-9]/g, "").slice(0, 4);
+      Array.from(cells).forEach((cell, index) => {
+        cell.textContent = input.value[index] ? "•" : "";
+      });
+    };
+    input.addEventListener("input", render);
+    render();
+  }
+  function clearPin(input) {
+    input.value = "";
+    input.dispatchEvent(new Event("input"));
+  }
+  document.querySelectorAll(".pin-input").forEach(bindPinInput);
   $("#remember-browser").onchange = () => {
     const enabled = $("#remember-browser").checked;
     $("#pin-setup").hidden = !enabled;
@@ -111,7 +127,7 @@
       const input = $(`#password-login-form [name="${name}"]`);
       input.required = enabled;
       input.disabled = !enabled;
-      if (!enabled) input.value = "";
+      if (!enabled) clearPin(input);
     }
   };
   $("#remember-browser").onchange();
@@ -151,7 +167,9 @@
       location.replace("/");
     } catch (error) { $("#login-error").textContent = error.message; }
     finally {
-      for (const name of ["password", "new_pin", "confirm_pin"]) form.elements[name].value = "";
+      form.elements.password.value = "";
+      clearPin(form.elements.new_pin);
+      clearPin(form.elements.confirm_pin);
       form.elements.password.type = "password";
       $("#show-login-password").textContent = "Show";
       $("#show-login-password").setAttribute("aria-pressed", "false");
@@ -184,7 +202,7 @@
       $("#login-error").textContent = decrypted
         ? `${error.message} Use your password if the server credentials have changed.` : error.message;
     } finally {
-      form.elements.pin.value = "";
+      clearPin(form.elements.pin);
       submit.disabled = false;
       submit.textContent = "Unlock vault";
     }
