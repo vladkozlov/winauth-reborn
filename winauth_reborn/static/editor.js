@@ -97,6 +97,7 @@ $("#edit-form").onsubmit = async (event) => {
   try {
     await json(`/api/accounts/${account.id}`, { method: "PATCH", body: JSON.stringify(changes) });
     hotpCodes.delete(account.id);
+    revealedCodes.delete(account.id);
     $("#edit-dialog").close();
     await loadAccounts(true);
     toast("Authenticator updated");

@@ -21,6 +21,7 @@ let activeSteam = null;
 let emailFlow = null;
 let toastTimer;
 const hotpCodes = new Map();
+const revealedCodes = new Set();
 const defaults = { theme: "dark", density: "comfortable", hide_codes: false, sort_order: "imported", auto_hide_seconds: 0 };
 
 function element(tag, className, text) {
@@ -74,6 +75,7 @@ async function copy(text, message = "Code copied to clipboard") {
 
 function setPrivacy(hidden) {
   hiddenCodes = hidden;
+  revealedCodes.clear();
   $("#privacy-button").textContent = hidden ? "Show codes" : "Hide codes";
   $("#privacy-button").setAttribute("aria-pressed", String(hidden));
   updateCards();
@@ -131,7 +133,7 @@ function confirmAction(title, message, action, dangerous = false) {
 function shownCode(account) {
   const code = account.kind === "hotp" ? hotpCodes.get(account.id) : account.code;
   if (!code) return "--- ---";
-  if (hiddenCodes) return "\u2022".repeat(code.length);
+  if (hiddenCodes && !revealedCodes.has(account.id)) return "\u2022".repeat(code.length);
   return /^\d{6}$/.test(code) ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
 }
 
@@ -200,7 +202,12 @@ function accountCard(account) {
     } catch (error) { toast(error.message, true); }
     finally { copyButton.disabled = false; }
   };
-  code.onclick = copyCode;
+  code.onclick = () => {
+    if (hiddenCodes && !revealedCodes.has(account.id)) {
+      revealedCodes.add(account.id);
+      updateCards();
+    } else copyCode();
+  };
   copyButton.onclick = copyCode;
   codeRow.append(code, copyButton);
   card.append(heading, codeRow);
@@ -282,6 +289,9 @@ function updateCards() {
     const code = card.querySelector(".code");
     const expired = account.kind !== "hotp" && account.remaining - elapsed <= 0;
     const unavailable = account.kind === "hotp" && !hotpCodes.has(account.id);
+    const obscured = hiddenCodes && !revealedCodes.has(account.id);
+    code.setAttribute("aria-label", `${obscured ? "Reveal" : "Copy"} code for ${account.name}`);
+    code.title = obscured ? "Click to reveal this code" : "Click to copy";
     code.textContent = expired ? "--- ---" : shownCode(account);
     code.classList.toggle("long-code", code.textContent.length > 7);
     code.disabled = expired || unavailable;
@@ -572,6 +582,8 @@ document.addEventListener("visibilitychange", () => {
   if (!initialized) return;
   if (!document.hidden) loadAccounts();
   else {
+    revealedCodes.clear();
+    updateCards();
     clearRecovery();
     $("#recovery-dialog").close();
     if (settings?.auto_hide_seconds) setPrivacy(true);
