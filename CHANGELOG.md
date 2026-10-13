@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+- Added a friendly Basic Auth-backed login page, signed browser sessions, and
+  explicit vault locking while preserving Basic Auth for API clients.
+- Added optional encrypted browser credential storage with 6-12 digit PIN
+  unlock, password fallback, and forgetting saved logins.
+- Filled pinned-card stars and added a visually separated pinned group.
+- Moved Steam recovery details into the card settings dialog.
+- Added click-to-reveal for individual hidden codes without copying.
+- Added regression coverage for login/session boundaries, actual encrypted PIN
+  persistence and unlock, filled stars, spacing, and individual privacy reveals.
+
 ## 0.2.0
 
 - Added editable account names, issuers, token parameters, and optional secret

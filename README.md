@@ -34,7 +34,8 @@ chmod 600 .env
 python -m winauth_reborn
 ```
 
-Open <http://localhost:8080> and sign in at the browser's HTTP Basic Auth prompt.
+Open <http://localhost:8080> and sign in on the login page using those Basic Auth
+credentials. API clients can still send HTTP Basic Auth directly.
 The app uses Waitress, not Flask's development server. It binds to loopback by default.
 Do not enable Flask debugging on a server holding real secrets.
 
@@ -47,6 +48,34 @@ python -c 'import getpass; from werkzeug.security import generate_password_hash;
 
 Set that hash in `.env` and remove `WINAUTH_PASSWORD`. Both settings and the
 environment are **server configuration**, never sent to the browser.
+
+### Remember this browser with a PIN
+
+On the login page, enable **Remember this browser with a PIN** and choose a
+6-12 digit PIN. Future visits can unlock using that PIN instead of retyping your
+server credentials. This requires **HTTPS or localhost** and Web Crypto support.
+Use a long, random PIN and only enable it on a trusted device.
+
+The browser stores an **encrypted credential envelope**, not plaintext credentials
+or the PIN: AES-GCM-256 with a random salt/IV and a key derived using
+PBKDF2-SHA256 with 600,000 iterations. The envelope is bound to the application's
+origin and stays in that browser's localStorage until forgotten or cleared.
+The PIN decrypts credentials locally; the server still verifies Basic Auth.
+**This is convenience unlock, not a second authentication factor.** A stolen
+envelope permits offline PIN guessing; the browser's retry cooldown does not stop
+that attack. A compromised browser can capture credentials when you unlock.
+
+**Lock vault** signs out without deleting the saved envelope. Browser access uses
+a signed HttpOnly, SameSite Strict cookie (Secure with `WINAUTH_HTTPS_ONLY=true`),
+valid for at most 12 hours and invalidated when the server restarts. The cookie
+contains no credentials. Locking suppresses cached browser Basic Auth while the
+signed lock cookie remains valid; it does not revoke server credentials or other
+devices' sessions.
+
+Use **Use username and password instead** if you forget your PIN or change server
+credentials. **Forget saved login** removes only this browser's encrypted login,
+not your vault. To replace the PIN or remembered credentials, sign in again with
+**Remember this browser** enabled. Browser password-manager storage is separate.
 
 ## Import and use
 
@@ -70,6 +99,9 @@ Use **Import authenticators** to select/drop the file, or paste its contents.
   advances the counter atomically. Copying that generated code does not advance it
   again. It remains visible until the page reloads. Generate only when you need it.
 - **Hide codes**, search, and the Steam-only filter work on desktop and mobile.
+  Click hidden dots to reveal just that card's code without copying; **Copy**
+  still copies directly. Individual reveals reset when privacy is toggled or the
+  tab becomes hidden.
 - **Export backup** downloads a WinAuth-compatible plaintext `.txt`, including
   current HOTP counters but excluding saved Steam web sessions. Treat it as a secret.
 
@@ -94,8 +126,10 @@ account's initial, or upload a custom PNG/JPEG/WebP icon. Uploads are limited to
 metadata. External icon URLs and arbitrary uploaded SVGs are not accepted. No
 third-party icon service is contacted.
 
-The star button pins/unpins a card. Pinned cards always appear first within the
-selected sort order; **Pinned only** combines with search and the Steam filter.
+The star button pins/unpins a card and fills when pinned. Pinned cards always
+appear first within the selected sort order, separated from ordinary cards by
+extra spacing and a subtle divider. **Pinned only** combines with search and the
+Steam filter.
 Card colors, icons, and pin state persist in the encrypted vault and round-trip
 through `x-reborn-*` URI extensions in `.txt` backups. WinAuth ignores these extra
 parameters without losing the authenticator's standard fields. Existing legacy
@@ -121,7 +155,8 @@ Code hiding is a visual privacy feature, not a vault lock or reauthentication.
 
 ### Steam Guard secret and recovery code
 
-Choose **Recovery details** on a Steam card and explicitly confirm the reveal.
+Open a Steam card's pencil/settings dialog, choose **Recovery details**, and
+explicitly confirm the reveal.
 The dialog shows the current Steam Guard login code, the authenticator secret in
 Base32 and Base64, the recovery/revocation code, and the serial when present.
 Each value has a copy button. This works offline from the imported authenticator
@@ -175,9 +210,13 @@ trade was used to test this project.
 
 This is a **single-owner vault**, not a multi-user password manager. All clients
 using the configured Basic Auth credentials can access the same accounts. Basic
-Auth protects every route, including static files and APIs; writes additionally
-require the app's CSRF header. Credentials and codes are not stored in browser
-localStorage or a service worker.
+Auth or a verified browser session protects the vault, APIs, and application
+scripts; writes additionally require the app's CSRF header. Only the login page
+and its CSS/JavaScript assets are public; they contain no vault data. Login
+requires explicit Basic credentials, a custom JSON request, and same-origin
+validation when an Origin header is present. Codes are not persisted in browser
+storage; optional remembered credentials are encrypted as described above.
+There is no service worker.
 
 Use **HTTPS**, keep the application port private, and terminate TLS at a reverse
 proxy. Basic Auth is only encoded, not encrypted, over plain HTTP. For example,
@@ -189,7 +228,7 @@ auth.example.com {
 }
 ```
 
-Set `WINAUTH_HTTPS_ONLY=true` to enable HSTS on responses when deployed behind TLS.
+Set `WINAUTH_HTTPS_ONLY=true` to enable HSTS and Secure session cookies behind TLS.
 This flag does **not** create certificates or check trusted forwarded headers:
 restrict access to the upstream port. Leave it false for local HTTP development.
 Apply authentication brute-force/rate-limit controls at your ingress, limit the
@@ -198,9 +237,9 @@ bodies or Authorization headers.
 
 The app runs as one process with threaded request handling. SQLite transactions
 protect counter advancement and imports. Do not run multiple independent app
-processes: CSRF tokens, Steam time offsets, and pending email challenges are
-process-local. Waitress's default eight threads provide concurrency without that
-split state.
+processes: browser-session signing keys, CSRF tokens, Steam time offsets, and
+pending email challenges are process-local. Waitress's default eight threads
+provide concurrency without that split state.
 
 ### Docker
 
