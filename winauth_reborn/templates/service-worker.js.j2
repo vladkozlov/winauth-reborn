@@ -10,10 +10,10 @@ self.addEventListener("install", (event) => {
 });
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
+    await self.clients.claim();
     for (const name of await caches.keys()) {
       if (name.startsWith(PREFIX) && name !== CACHE) await caches.delete(name);
     }
-    await self.clients.claim();
   })());
 });
 self.addEventListener("message", (event) => {
