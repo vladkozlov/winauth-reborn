@@ -21,6 +21,10 @@ fixtures and a minimal reproduction instead.
 - Keep the upstream port private. Add rate limiting and, preferably, VPN or
   network access restrictions at the reverse proxy.
 - All clients share the same vault; this is not multi-tenant software.
+- Code hiding and idle privacy are visual controls, not authentication locks.
+  Steam recovery details require an explicit authenticated, CSRF-protected reveal
+  and clear from the UI when closed, hidden, or timed out; copied clipboard values
+  remain sensitive.
 - The running host holds the encryption key. Encryption at rest does not protect
   against a compromised server, process, backup containing both files, or browser.
 - Keep Python, containers, and dependencies patched. Use a non-root service user,

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0
+
+- Added editable account names, issuers, token parameters, and optional secret
+  replacement without resetting HOTP counters or Steam sessions.
+- Added locally bundled Lucide icons, validated raster icon uploads, custom card
+  colors, persistent pins, and a pinned-only filter.
+- Added encrypted owner preferences for themes, compact density, ordering,
+  default code privacy, and idle hiding, plus keyboard shortcuts.
+- Added dark, light, and live system-following themes.
+- Added explicitly revealed Steam Guard secrets and recovery/revocation codes,
+  with copying and automatic clearing after 60 seconds or when hidden.
+- Added compatible backup extensions for card appearance and pin state, and
+  regression coverage for editing, settings, themes, and timed recovery clearing.
+
 ## 0.1.0
 
 Initial alpha release:

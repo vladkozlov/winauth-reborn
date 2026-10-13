@@ -14,7 +14,7 @@ playwright install chromium
 python -m pytest
 ruff check .
 ruff format --check .
-node --check winauth_reborn/static/app.js
+for script in winauth_reborn/static/*.js; do node --check "$script"; done
 ```
 
 Keep changes focused. Add deterministic tests for parser compatibility, cryptography,
