@@ -37,28 +37,47 @@ def device_id(steam_id: str) -> str:
 
 class SteamService:
     def __init__(self, proxy_url: str | None = None):
-        if proxy_url:
-            try:
-                proxy = urlsplit(proxy_url)
-                port = proxy.port
-            except ValueError as exc:
-                raise ValueError(
-                    "WINAUTH_STEAM_PROXY must be a valid socks5h://host:port URL."
-                ) from exc
-            if (
-                proxy.scheme != "socks5h"
-                or not proxy.hostname
-                or port is None
-                or proxy.path
-                or proxy.query
-                or proxy.fragment
-            ):
-                raise ValueError("WINAUTH_STEAM_PROXY must be a socks5h://host:port URL.")
-        self.proxy_url = proxy_url
+        self.proxy_url = self.validate_proxy_url(proxy_url) if proxy_url else None
         self.offset = 0.0
         self.synced_at: float | None = None
         self.pending: dict[str, dict] = {}
         self.lock = threading.RLock()
+
+    @staticmethod
+    def validate_proxy_url(proxy_url: str) -> str:
+        if not isinstance(proxy_url, str) or len(proxy_url) > 2048:
+            raise ValueError("Steam proxy URL must be text of at most 2048 characters.")
+        try:
+            proxy = urlsplit(proxy_url)
+            port = proxy.port
+        except ValueError as exc:
+            raise ValueError("Steam proxy must be a valid socks5h://host:port URL.") from exc
+        if (
+            proxy.scheme != "socks5h"
+            or not proxy.hostname
+            or port is None
+            or port == 0
+            or proxy.path
+            or proxy.query
+            or proxy.fragment
+            or (proxy.username is None) != (proxy.password is None)
+            or (proxy.username is not None and (not proxy.username or proxy.password == ""))
+        ):
+            raise ValueError(
+                "Steam proxy must be a socks5h://host:port URL, optionally with "
+                "username:password credentials."
+            )
+        return proxy_url
+
+    def set_proxy(self, proxy_url: str | None):
+        proxy_url = self.validate_proxy_url(proxy_url) if proxy_url else None
+        with self.lock:
+            if self.proxy_url == proxy_url:
+                return
+            self.proxy_url = proxy_url
+            for flow in self.pending.values():
+                flow["session"].close()
+            self.pending.clear()
 
     @staticmethod
     def request(session: requests.Session, method: str, url: str, **kwargs) -> dict:

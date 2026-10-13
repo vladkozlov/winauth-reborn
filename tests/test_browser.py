@@ -376,6 +376,34 @@ def test_preferences_themes_compact_privacy_sort_and_shortcuts(browser_page):
     assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(245, 247, 245)"
 
 
+def test_settings_apply_protected_steam_proxy_to_next_requests(browser_page, live_app):
+    page = browser_page
+    page.locator("#settings-button").click()
+    expect(page.locator("#steam-proxy-status")).to_contain_text("connects directly")
+    page.locator('#steam-proxy-form [name="mode"]').select_option("custom")
+    proxy_url = "socks5h://steam-user:secret%40phrase@127.0.0.1:1080"
+    page.locator('#steam-proxy-form [name="url"]').fill(proxy_url)
+    page.get_by_role("button", name="Apply proxy", exact=True).click()
+    expect(page.locator("#steam-proxy-status")).to_contain_text("saved securely")
+    steam = live_app[0].extensions["steam"]
+    assert steam.proxy_url == proxy_url
+    session = steam.new_session()
+    try:
+        assert session.proxies["https"] == proxy_url
+    finally:
+        session.close()
+    assert page.locator('#steam-proxy-form [name="url"]').input_value() == ""
+    response_body = page.evaluate("fetch('/api/steam/proxy').then(response => response.text())")
+    assert "secret%40phrase" not in response_body
+
+    page.locator('#steam-proxy-form [name="mode"]').select_option("direct")
+    page.get_by_role("button", name="Apply proxy", exact=True).click()
+    expect(page.locator("#steam-proxy-status")).to_have_text(
+        "Steam connects directly from the server."
+    )
+    assert live_app[0].extensions["steam"].proxy_url is None
+
+
 def test_recovery_is_revealed_only_after_confirmation_and_cleared(browser_page):
     page = browser_page
     import_sample(page)

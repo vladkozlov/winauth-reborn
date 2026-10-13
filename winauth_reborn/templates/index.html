@@ -218,6 +218,25 @@
       <div id="settings-error" class="form-error" role="alert"></div>
       <div class="dialog-actions"><button class="button secondary" type="button" id="reset-settings">Restore defaults</button><button class="button primary" type="submit">Save settings</button></div>
     </form>
+    {% if not browser_mode %}
+    <form id="steam-proxy-form">
+      <hr class="settings-divider">
+      <h3>Steam network</h3>
+      <p class="muted">Choose how the server connects to Steam. Changes apply to subsequent Steam requests immediately.</p>
+      <label class="field">Proxy mode<select name="mode">
+        <option value="environment">Use server default</option>
+        <option value="direct">Connect directly</option>
+        <option value="custom">Custom SOCKS5h proxy</option>
+      </select></label>
+      <div id="steam-proxy-url-field" hidden>
+        <label class="field">SOCKS5h URL<input name="url" type="password" maxlength="2048" autocomplete="new-password" spellcheck="false" placeholder="socks5h://username:password@host:1080"><span class="muted">Authentication is optional. Use percent-encoding for special characters in credentials.</span></label>
+        <p class="banner">The proxy URL is encrypted in the server vault and never returned to the browser. SOCKS5 credentials are not encrypted by the proxy protocol itself: use a private encrypted tunnel such as WireGuard, and do not expose the proxy port publicly.</p>
+      </div>
+      <p id="steam-proxy-status" class="muted" role="status"></p>
+      <div id="steam-proxy-error" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button class="button primary" type="submit">Apply proxy</button></div>
+    </form>
+    {% endif %}
   </dialog>
 
   <dialog id="recovery-dialog" class="wide-dialog" aria-labelledby="recovery-title">

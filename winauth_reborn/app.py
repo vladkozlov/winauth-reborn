@@ -46,6 +46,19 @@ def create_app(config: dict | None = None) -> Flask:
     app.config.pop("AUTH_PASSWORD", None)
     vault = Vault(Path(app.config["DATA_DIR"]).resolve())
     steam = SteamService(app.config["STEAM_PROXY"] or None)
+    proxy_override = vault.steam_proxy_override()
+    if proxy_override:
+        if not isinstance(proxy_override, dict):
+            raise RuntimeError("The saved Steam proxy setting is invalid.")
+        if proxy_override.get("mode") == "custom":
+            proxy_url = proxy_override.get("url")
+            if not isinstance(proxy_url, str):
+                raise RuntimeError("The saved Steam proxy setting is invalid.")
+            steam.set_proxy(proxy_url)
+        elif proxy_override.get("mode") == "direct":
+            steam.set_proxy(None)
+        else:
+            raise RuntimeError("The saved Steam proxy setting is invalid.")
     app.extensions.update(vault=vault, steam=steam)
     csrf = secrets.token_urlsafe(32)
     app.secret_key = secrets.token_bytes(32)
@@ -223,6 +236,57 @@ def create_app(config: dict | None = None) -> Flask:
     @app.patch("/api/settings")
     def update_settings():
         return jsonify(settings=vault.update_settings(body()))
+
+    def steam_proxy_settings():
+        override = vault.steam_proxy_override()
+        mode = override["mode"] if override else "environment"
+        return {"mode": mode, "active": bool(steam.proxy_url)}
+
+    @app.get("/api/steam/proxy")
+    def steam_proxy():
+        return jsonify(proxy=steam_proxy_settings())
+
+    @app.put("/api/steam/proxy")
+    def update_steam_proxy():
+        data = body()
+        mode = data.get("mode")
+        if (
+            not isinstance(mode, str)
+            or mode not in {"environment", "direct", "custom"}
+            or set(data) - {"mode", "url"}
+        ):
+            raise ValueError("Choose environment, direct, or custom Steam proxy mode.")
+        url_value = data.get("url")
+        if mode != "custom" and url_value is not None and url_value != "":
+            raise ValueError("Only custom Steam proxy mode accepts a proxy URL.")
+        override = None
+        if mode == "direct":
+            override = {"mode": "direct"}
+        elif mode == "custom":
+            proxy_url = url_value
+            if proxy_url is None:
+                proxy_url = ""
+            if not isinstance(proxy_url, str):
+                raise ValueError("Steam proxy URL must be text of at most 2048 characters.")
+            proxy_url = proxy_url.strip()
+            if not proxy_url:
+                previous = vault.steam_proxy_override()
+                if previous and previous.get("mode") == "custom":
+                    override = previous
+                else:
+                    raise ValueError("Enter a SOCKS5h proxy URL.")
+            else:
+                if len(proxy_url) > 2048:
+                    raise ValueError("Steam proxy URL must be text of at most 2048 characters.")
+                override = {"mode": "custom", "url": steam.validate_proxy_url(proxy_url)}
+        vault.update_steam_proxy_override(override)
+        if override and override["mode"] == "custom":
+            steam.set_proxy(override["url"])
+        elif override and override["mode"] == "direct":
+            steam.set_proxy(None)
+        else:
+            steam.set_proxy(app.config["STEAM_PROXY"] or None)
+        return jsonify(proxy=steam_proxy_settings())
 
     @app.get("/api/accounts")
     def accounts():

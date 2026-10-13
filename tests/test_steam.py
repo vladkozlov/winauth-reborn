@@ -534,10 +534,12 @@ def test_steam_sessions_use_configured_socks_proxy():
         "socks5h:///1080",
         "socks5h://127.0.0.1:bad",
         "socks5h://127.0.0.1:1080/path",
+        "socks5h://:password@127.0.0.1:1080",
+        "socks5h://username:@127.0.0.1:1080",
     ],
 )
 def test_steam_proxy_rejects_unsupported_or_malformed_urls(proxy_url):
-    with pytest.raises(ValueError, match="WINAUTH_STEAM_PROXY"):
+    with pytest.raises(ValueError, match="Steam proxy must"):
         SteamService(proxy_url)
 
 
