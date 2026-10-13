@@ -108,8 +108,9 @@
         });
       });
       await navigator.serviceWorker.ready;
-      if (!registration.active) throw new Error("No active service worker is available.");
-      await cleanOldCaches(registration.active);
+      const controller = navigator.serviceWorker.controller;
+      if (!controller) throw new Error("No active service worker controls this page.");
+      await cleanOldCaches(controller);
       status(window.browserVault ? "Offline app ready. Vault stays on this browser." : "App shell ready. Your server is required for codes.");
     } catch (error) { status(`Offline setup failed: ${error.message}`); }
   });
