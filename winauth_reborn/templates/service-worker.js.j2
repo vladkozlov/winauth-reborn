@@ -5,19 +5,8 @@ const CACHE = PREFIX + {{ fingerprint | tojson }};
 const ASSETS = {{ assets | tojson }}.map((path) => new URL(path, self.registration.scope).href);
 const ALLOWED = new Set(ASSETS);
 const deleteOldCaches = async () => {
-  let emptyPasses = 0;
-  for (let attempt = 0; attempt < 10 && emptyPasses < 3; attempt++) {
-    const oldCaches = (await caches.keys()).filter((name) => name.startsWith(PREFIX) && name !== CACHE);
-    if (oldCaches.length) {
-      emptyPasses = 0;
-      await Promise.all(oldCaches.map((name) => caches.delete(name)));
-    } else {
-      emptyPasses++;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  if ((await caches.keys()).some((name) => name.startsWith(PREFIX) && name !== CACHE)) {
-    throw new Error("Could not remove outdated app caches during activation.");
+  for (const name of await caches.keys()) {
+    if (name.startsWith(PREFIX) && name !== CACHE) await caches.delete(name);
   }
 };
 self.addEventListener("install", (event) => {
@@ -32,6 +21,9 @@ self.addEventListener("activate", (event) => {
 });
 self.addEventListener("message", (event) => {
   if (event.data === "ACTIVATE_UPDATE") self.skipWaiting();
+  else if (event.data === "CLEAN_OLD_CACHES") {
+    event.waitUntil(deleteOldCaches().then(() => event.ports[0]?.postMessage("cleaned")));
+  }
 });
 self.addEventListener("fetch", (event) => {
   const request = event.request;

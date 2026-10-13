@@ -38,6 +38,24 @@
     const reload = () => {
       if (!reloading) { reloading = true; location.reload(); }
     };
+    const cleanOldCaches = (worker) => new Promise((resolve, reject) => {
+      const channel = new MessageChannel();
+      const timeout = setTimeout(() => {
+        channel.port1.close();
+        reject(new Error("Timed out while cleaning old app caches."));
+      }, 5000);
+      channel.port1.onmessage = () => {
+        clearTimeout(timeout);
+        channel.port1.close();
+        resolve();
+      };
+      channel.port1.onmessageerror = () => {
+        clearTimeout(timeout);
+        channel.port1.close();
+        reject(new Error("Could not confirm old app cache cleanup."));
+      };
+      worker.postMessage("CLEAN_OLD_CACHES", [channel.port2]);
+    });
     const watchUpdate = () => {
       const worker = registration.waiting;
       update.hidden = !worker;
@@ -87,6 +105,9 @@
         });
       });
       await navigator.serviceWorker.ready;
+      if (navigator.serviceWorker.controller) {
+        await cleanOldCaches(navigator.serviceWorker.controller);
+      }
       status(window.browserVault ? "Offline app ready. Vault stays on this browser." : "App shell ready. Your server is required for codes.");
     } catch (error) { status(`Offline setup failed: ${error.message}`); }
   });
