@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 import secrets
 import time
@@ -11,7 +12,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .appearance import ICONS
-from .authenticators import export_record, generate_code, parse_export
+from .authenticators import decode_secret, export_record, generate_code, parse_export
 from .steam import SteamError, SteamService, cookie_session
 from .storage import AccountNotFound, Vault
 
@@ -162,6 +163,22 @@ def create_app(config: dict | None = None) -> Flask:
     def edit_account(account_id):
         vault.edit(account_id, body())
         return jsonify(ok=True)
+
+    @app.post("/api/accounts/<account_id>/steam/recovery")
+    def steam_recovery(account_id):
+        record = vault.get(account_id)
+        if record["kind"] != "steam":
+            raise ValueError("This account is not a Steam authenticator.")
+        data = record["steam_data"]
+        timestamp = time.time() + steam.offset
+        return jsonify(
+            guard_code=generate_code(record, timestamp),
+            remaining=record["period"] - timestamp % record["period"],
+            shared_secret=record["secret"],
+            shared_secret_base64=base64.b64encode(decode_secret(record["secret"])).decode(),
+            recovery_code=data.get("revocation_code") or data.get("recovery_code") or None,
+            serial_number=data.get("serial_number") or None,
+        )
 
     @app.post("/api/import")
     def import_file():
