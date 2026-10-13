@@ -241,6 +241,24 @@ def test_hotp_atomic_across_tabs_and_lossless_large_counters(browser_edition, st
     second.close()
 
 
+def test_add_totp_manually_in_browser_vault(browser_edition):
+    page = browser_edition
+    page.locator("#empty-add-totp").click()
+    form = page.locator("#add-totp-form")
+    form.locator('[name="name"]').fill("browser-user")
+    form.locator('[name="issuer"]').fill("Browser Example")
+    form.locator('[name="secret"]').fill("JBSWY3DPEHPK3PXP")
+    form.locator('[name="digits"]').select_option("8")
+    form.get_by_role("button", name="Add TOTP", exact=True).click()
+    expect(page.locator(".account-card")).to_have_count(1)
+    account = local_request(page, "/api/accounts")["data"]["accounts"][0]
+    assert (account["name"], account["issuer"], account["digits"]) == (
+        "browser-user",
+        "Browser Example",
+        8,
+    )
+
+
 def test_atomic_imports_duplicate_preservation_edit_preferences_and_export(browser_edition):
     page = browser_edition
     import_sample(page)

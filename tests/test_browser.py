@@ -154,6 +154,27 @@ def test_import_copy_search_privacy_hotp_and_restart(browser_page, live_app):
     expect(bob.locator(".time-row")).to_contain_text("Counter: 1")
 
 
+def test_add_totp_manually(browser_page, live_app):
+    page = browser_page
+    page.locator("#empty-add-totp").click()
+    form = page.locator("#add-totp-form")
+    form.locator('[name="name"]').fill("alice+test@example.com")
+    form.locator('[name="issuer"]').fill("Example & Co")
+    form.locator('[name="secret"]').fill("JBSWY3DPEHPK3PXP")
+    form.locator('[name="algorithm"]').select_option("SHA256")
+    form.locator('[name="digits"]').select_option("8")
+    form.locator('[name="period"]').fill("45")
+    form.get_by_role("button", name="Add TOTP", exact=True).click()
+
+    expect(page.locator(".account-card")).to_have_count(1)
+    account = live_app[0].extensions["vault"].list()[0]
+    assert account["name"] == "alice+test@example.com"
+    assert account["issuer"] == "Example & Co"
+    assert (account["algorithm"], account["digits"], account["period"]) == ("SHA256", 8, 45)
+    assert account["secret"] == "JBSWY3DPEHPK3PXP"
+    expect(page.locator("#add-totp-dialog")).not_to_be_visible()
+
+
 def test_steam_login_review_approve_and_disconnect(browser_page, live_app):
     page = browser_page
     import_sample(page)

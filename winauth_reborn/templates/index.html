@@ -56,6 +56,7 @@
         <button class="button secondary icon-only" id="lock-button" aria-label="Lock vault" title="Lock vault and sign out">&#9099;</button>
         <button class="button secondary icon-only" id="settings-button" aria-label="Settings" title="Settings">&#9881;</button>
         <button class="button secondary" id="privacy-button" aria-pressed="false">Hide codes</button>
+        <button class="button secondary" id="add-totp-button"><span aria-hidden="true">+</span> Add TOTP</button>
         <button class="button primary" id="import-button"><span aria-hidden="true">+</span> Import authenticators</button>
       </div>
     </header>
@@ -76,6 +77,7 @@
       <div class="empty-mark" aria-hidden="true">&#10022;</div>
       <h2>Your next chapter starts here.</h2>
       <p>Bring your existing WinAuth authenticators with you.<br>Import your original .txt export to get started.</p>
+      <button class="button secondary" id="empty-add-totp">Add a TOTP manually</button>
       <button class="button primary" id="empty-import">Import WinAuth .txt</button>
       <span class="muted">TOTP &middot; HOTP &middot; Steam Guard &middot; Battle.net</span>
     </section>
@@ -83,6 +85,26 @@
     <footer>WinAuth Reborn <span>&middot;</span> Self-hosted. Yours to keep. <button class="text-button mobile-only" id="mobile-export-button">Export backup</button><span id="refresh-status"></span></footer>
   </main>
   {% include 'pwa_controls.html' %}
+
+  <dialog id="add-totp-dialog" aria-labelledby="add-totp-title">
+    <div class="dialog-heading"><div><span class="eyebrow">ADD AUTHENTICATOR</span><h2 id="add-totp-title">Add a TOTP</h2></div><button class="close-button" data-close aria-label="Close add TOTP">&times;</button></div>
+    <p class="muted">Enter the shared key provided by the service when you set up an authenticator. This adds codes to WinAuth Reborn; it does not register or change an authenticator with that service.</p>
+    <form id="add-totp-form">
+      <div class="field-grid">
+        <label class="field">Account name<input name="name" required maxlength="200" autocomplete="off" placeholder="alice@example.com"></label>
+        <label class="field">Service / issuer<input name="issuer" maxlength="200" autocomplete="off" placeholder="Example"></label>
+      </div>
+      <label class="field">Shared key (Base32)<input name="secret" type="password" required maxlength="256" autocomplete="off" spellcheck="false" placeholder="Enter the key from the service"><span class="muted">Spaces are ignored. Keep this key private.</span></label>
+      <div class="field-grid">
+        <label class="field">Algorithm<select name="algorithm"><option>SHA1</option><option>SHA256</option><option>SHA512</option></select></label>
+        <label class="field">Digits<select name="digits"><option>6</option><option>8</option><option>5</option><option>7</option><option>9</option><option>10</option></select></label>
+        <label class="field">Period (seconds)<input name="period" type="number" min="1" max="86400" value="30" required></label>
+      </div>
+      <div class="banner">For safety, confirm the generated code with the service before relying on it. Keep a secure backup of your shared key.</div>
+      <div id="add-totp-error" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close>Cancel</button><button class="button primary" type="submit">Add TOTP</button></div>
+    </form>
+  </dialog>
 
   <dialog id="import-dialog" aria-labelledby="import-title">
     <div class="dialog-heading"><div><span class="eyebrow">BRING YOUR ACCOUNTS</span><h2 id="import-title">Import authenticators</h2></div><button class="close-button" data-close aria-label="Close import">&times;</button></div>

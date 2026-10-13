@@ -359,6 +359,12 @@ function openImport() {
   $("#import-dialog").showModal();
 }
 
+function openAddTotp() {
+  $("#add-totp-form").reset();
+  $("#add-totp-error").textContent = "";
+  $("#add-totp-dialog").showModal();
+}
+
 async function selectFile(file) {
   if (!file) return;
   if (file.size > 2 * 1024 * 1024) {
@@ -376,6 +382,37 @@ async function selectFile(file) {
 
 $("#import-button").onclick = openImport;
 $("#empty-import").onclick = openImport;
+$("#add-totp-button").onclick = openAddTotp;
+$("#empty-add-totp").onclick = openAddTotp;
+$("#add-totp-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const submit = event.submitter;
+  const params = new URLSearchParams({
+    secret: form.elements.secret.value.trim(),
+    algorithm: form.elements.algorithm.value,
+    digits: form.elements.digits.value,
+    period: form.elements.period.value,
+  });
+  const issuer = form.elements.issuer.value.trim();
+  if (issuer) params.set("issuer", issuer);
+  const uri = `otpauth://totp/${encodeURIComponent(form.elements.name.value.trim())}?${params}`;
+  submit.disabled = true;
+  $("#add-totp-error").textContent = "";
+  try {
+    const result = await json("/api/import", {
+      method: "POST", body: JSON.stringify({ text: uri }),
+    });
+    $("#add-totp-dialog").close();
+    await loadAccounts(true);
+    toast(result.added ? "TOTP added" : "This TOTP is already in your vault");
+  } catch (error) { $("#add-totp-error").textContent = error.message; }
+  finally { submit.disabled = false; }
+};
+$("#add-totp-dialog").addEventListener("close", () => {
+  $("#add-totp-form").reset();
+  $("#add-totp-error").textContent = "";
+});
 $("#import-file").onchange = (event) => selectFile(event.target.files[0]);
 $("#dropzone").onkeydown = (event) => {
   if (event.key === "Enter" || event.key === " ") {

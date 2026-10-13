@@ -100,6 +100,11 @@ In WinAuth, choose **Export** and save an unencrypted `.txt` export. For Steam,
 include the full authenticator data rather than a compatibility-only URI.
 Use **Import authenticators** to select/drop the file, or paste its contents.
 
+- **Add TOTP** to enter a service's shared Base32 key, account name, issuer, and
+  code parameters manually. This creates a code generator in the vault; it does
+  not enroll or update an authenticator at the service. Verify a generated code
+  with the service before relying on it. To add a TOTP from a QR code, paste or
+  import its `otpauth://` URI instead.
 - Each non-empty, non-comment line is an `otpauth://totp/...` or `otpauth://hotp/...` URI.
   UTF-8 BOMs, WinAuth label encoding, `issuer`, `digits`, `algorithm`, `period`,
   and `counter` are supported.
@@ -124,7 +129,7 @@ Use **Import authenticators** to select/drop the file, or paste its contents.
 
 Encrypted ZIP/PGP exports and WinAuth XML configuration files are **not** plain-text
 exports. Decrypt or export to plaintext locally before importing; this app does not
-enroll new hardware authenticators, recover lost secrets, or migrate device-bound
+enroll authenticators with services, recover lost secrets, or migrate device-bound
 WinAuth encryption. It copies **one-time authentication codes**, not account passwords.
 
 ## Customize cards and preferences
