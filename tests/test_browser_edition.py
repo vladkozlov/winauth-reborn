@@ -422,7 +422,11 @@ def test_update_handles_worker_transition_during_confirmation(
               container.controller = new EventTarget();
               container.register = async () => registration;
               container.ready = Promise.resolve(registration);
-              worker.postMessage = (message) => {
+              worker.postMessage = (message, ports) => {
+                if (message === 'CLEAN_OLD_CACHES') {
+                  ports[0].postMessage('cleaned');
+                  return;
+                }
                 sessionStorage.setItem('test-update-message', message);
                 worker.state = 'activating';
                 registration.waiting = null;

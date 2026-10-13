@@ -69,8 +69,23 @@
         }
         update.dataset.accepted = "true";
         update.disabled = true;
+        let completingUpdate = false;
+        const completeUpdate = async () => {
+          if (completingUpdate || worker.state !== "activated" ||
+              navigator.serviceWorker.controller !== worker) return;
+          completingUpdate = true;
+          try {
+            await cleanOldCaches(worker);
+            reload();
+          } catch (error) {
+            completingUpdate = false;
+            update.dataset.accepted = "false";
+            update.disabled = false;
+            status(`Could not finish the app update: ${error.message}`);
+          }
+        };
         const reloadIfControlled = () => {
-          if (worker.state === "activated" && navigator.serviceWorker.controller === worker) reload();
+          completeUpdate();
         };
         worker.addEventListener("statechange", () => {
           if (worker.state === "activated") reloadIfControlled();
@@ -108,9 +123,6 @@
         });
       });
       await navigator.serviceWorker.ready;
-      const controller = navigator.serviceWorker.controller;
-      if (!controller) throw new Error("No active service worker controls this page.");
-      await cleanOldCaches(controller);
       status(window.browserVault ? "Offline app ready. Vault stays on this browser." : "App shell ready. Your server is required for codes.");
     } catch (error) { status(`Offline setup failed: ${error.message}`); }
   });
