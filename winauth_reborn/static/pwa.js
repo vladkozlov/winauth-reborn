@@ -69,8 +69,11 @@
         }
         update.dataset.accepted = "true";
         update.disabled = true;
+        const reloadIfControlled = () => {
+          if (worker.state === "activated" && navigator.serviceWorker.controller === worker) reload();
+        };
         worker.addEventListener("statechange", () => {
-          if (worker.state === "activated") reload();
+          if (worker.state === "activated") reloadIfControlled();
           else if (worker.state === "redundant") {
             update.dataset.accepted = "false";
             update.disabled = false;
@@ -78,9 +81,9 @@
             watchUpdate();
           }
         });
-        if (worker.state === "activated") {
-          reload();
-        } else if (navigator.serviceWorker.controller !== worker) {
+        navigator.serviceWorker.addEventListener("controllerchange", reloadIfControlled);
+        if (worker.state === "activated") reloadIfControlled();
+        else if (navigator.serviceWorker.controller !== worker) {
           try { worker.postMessage("ACTIVATE_UPDATE"); }
           catch (error) {
             update.dataset.accepted = "false";

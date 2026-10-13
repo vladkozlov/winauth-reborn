@@ -426,13 +426,15 @@ def test_update_handles_worker_transition_during_confirmation(
                 sessionStorage.setItem('test-update-message', message);
                 worker.state = 'activating';
                 registration.waiting = null;
-                container.controller = worker;
                 worker.dispatchEvent(new Event('statechange'));
-                container.dispatchEvent(new Event('controllerchange'));
                 setTimeout(() => {
                   worker.state = 'activated';
                   worker.dispatchEvent(new Event('statechange'));
                 }, 50);
+                setTimeout(() => {
+                  container.controller = worker;
+                  container.dispatchEvent(new Event('controllerchange'));
+                }, 100);
               };
               Object.defineProperty(navigator, 'serviceWorker', {value: container});
               window.testUpdate = {worker, registration, container};
