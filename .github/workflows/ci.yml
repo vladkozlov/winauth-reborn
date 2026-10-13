@@ -39,7 +39,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate Compose
-        run: docker compose --env-file .env.example config --no-env-resolution --quiet
+        run: |
+          cp .env.example .env
+          docker compose --env-file .env.example config --no-env-resolution --quiet
       - name: Build container
         run: docker build -t winauth-reborn:ci .
       - name: Verify authenticated container response
