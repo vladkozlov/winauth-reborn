@@ -390,7 +390,9 @@ def test_service_worker_update_preserves_vault_and_other_apps_caches(
         names = page.evaluate("caches.keys()")
         assert "unrelated-app-cache" in names
         assert any(name.endswith("-update") for name in names)
-        assert not any(name.endswith(fingerprint) for name in names)
+        assert not any(name.endswith(fingerprint) for name in names), (
+            f"Stale PWA cache remains after update: {names}"
+        )
     finally:
         worker_path.write_text(original)
         os.utime(worker_path, (original_stat.st_atime, original_stat.st_mtime))
