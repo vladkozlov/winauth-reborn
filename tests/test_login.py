@@ -20,7 +20,10 @@ def test_friendly_login_is_public_but_vault_remains_private(client):
     page = client.get("/login")
     assert page.status_code == 200
     assert "password-login-form" in page.text and "pin-login-form" in page.text
-    assert 'name="password" type="password" autocomplete="current-password" required minlength="6"' in page.text
+    assert (
+        'name="password" type="password" autocomplete="current-password" required minlength="6"'
+        in page.text
+    )
     assert page.text.count('class="pin-cells" aria-hidden="true"') == 3
     assert page.text.count('pattern="[0-9]{4}" minlength="4" maxlength="4"') == 3
     assert "csrf-token" not in page.text
