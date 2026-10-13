@@ -342,3 +342,156 @@ def test_idle_privacy_and_recovery_timeout(browser_page):
     )
     expect(page.locator("#recovery-dialog")).not_to_be_visible()
     expect(page.locator("#recovery-fields")).to_be_empty()
+
+
+def test_encrypted_pin_remember_unlock_wrong_pin_and_forget(browser_page, live_app):
+    page = browser_page
+    page.locator("#lock-button").click()
+    expect(page.locator("#password-login-form")).to_be_visible()
+    sign_in(page, pin="80726391")
+    stored = page.evaluate("localStorage.getItem('winauth.remembered-login.v1')")
+    envelope = json.loads(stored)
+    assert envelope["version"] == 1 and envelope["iterations"] == 600000
+    assert "test-owner" not in stored and "synthetic-browser-test-password" not in stored
+    assert "80726391" not in stored and "password" not in envelope
+    assert page.evaluate("sessionStorage.length") == 0
+    page.locator("#lock-button").click()
+    expect(page.locator("#pin-view")).to_be_visible()
+    page.locator('#pin-login-form [name="pin"]').fill("11111111")
+    page.get_by_role("button", name="Unlock vault", exact=True).click()
+    expect(page.locator("#login-error")).to_contain_text("Incorrect PIN")
+    assert (
+        page.evaluate(
+            "fetch('/api/accounts', {headers:{'X-Requested-With':'WinAuthReborn'}}).then(response=>response.status)"
+        )
+        == 401
+    )
+    page.locator('#pin-login-form [name="pin"]').fill("80726391")
+    page.get_by_role("button", name="Unlock vault", exact=True).click()
+    expect(page.locator("#empty-state")).to_be_visible()
+    origins = page.context.storage_state()["origins"]
+    context = page.context.browser.new_context(storage_state={"cookies": [], "origins": origins})
+    try:
+        restored = context.new_page()
+        restored.goto(live_app[2])
+        expect(restored.locator("#pin-view")).to_be_visible()
+        restored.locator('#pin-login-form [name="pin"]').fill("80726391")
+        restored.get_by_role("button", name="Unlock vault", exact=True).click()
+        expect(restored.locator("#empty-state")).to_be_visible()
+    finally:
+        context.close()
+    page.locator("#lock-button").click()
+    page.locator("#forget-login").click()
+    page.locator("#confirm-forget").click()
+    expect(page.locator("#password-view")).to_be_visible()
+    assert page.evaluate("localStorage.getItem('winauth.remembered-login.v1')") is None
+
+
+def test_filled_pin_separator_and_individual_dot_reveal(browser_page):
+    page = browser_page
+    import_sample(page)
+    page.get_by_role("button", name="Pin trader", exact=True).click()
+    pinned = page.locator(".account-card").first
+    expect(pinned.locator(".pin-button .icon-star-filled")).to_be_visible()
+    expect(page.locator(".pin-separator")).to_have_count(1)
+    next_card = page.locator(".account-card").nth(1)
+    pinned_box = pinned.bounding_box()
+    next_box = next_card.bounding_box()
+    gap = page.locator("#accounts").evaluate("(grid) => parseFloat(getComputedStyle(grid).rowGap)")
+    assert next_box["y"] - (pinned_box["y"] + pinned_box["height"]) >= 2 * gap + 12
+    page.set_viewport_size({"width": 430, "height": 900})
+    page.locator("#settings-button").click()
+    page.locator('#settings-form [name="density"]').select_option("compact")
+    page.get_by_role("button", name="Save settings", exact=True).click()
+    expect(page.locator("#settings-dialog")).not_to_be_visible()
+    pinned_box = pinned.bounding_box()
+    next_box = next_card.bounding_box()
+    gap = page.locator("#accounts").evaluate("(grid) => parseFloat(getComputedStyle(grid).rowGap)")
+    assert next_box["y"] - (pinned_box["y"] + pinned_box["height"]) >= 2 * gap + 12
+    page.locator("#pinned-filter").click()
+    expect(page.locator(".pin-separator")).to_have_count(0)
+    page.locator("#pinned-filter").click()
+    expect(page.locator(".pin-separator")).to_have_count(1)
+    page.locator("#privacy-button").click()
+    alice = page.locator(".account-card").filter(has=page.get_by_role("heading", name="alice"))
+    expect(alice.locator(".code")).to_have_text("••••••")
+    page.evaluate("navigator.clipboard.writeText('synthetic-do-not-copy')")
+    alice.get_by_role("button", name="Reveal code for alice", exact=True).click()
+    expect(alice.locator(".code")).not_to_have_text("••••••")
+    expect(pinned.locator(".code")).to_have_text("•••••")
+    assert page.evaluate("navigator.clipboard.readText()") == "synthetic-do-not-copy"
+    expect(page.locator("#toast")).not_to_be_visible()
+    pinned.get_by_role("button", name="Copy code for trader", exact=True).click()
+    expect(page.locator("#toast")).to_contain_text("Code copied")
+    assert len(page.evaluate("navigator.clipboard.readText()")) == 5
+    expect(pinned.locator(".code")).to_have_text("•••••")
+    page.locator("#privacy-button").click()
+    page.locator("#privacy-button").click()
+    expect(alice.locator(".code")).to_have_text("••••••")
+    page.get_by_role("button", name="Unpin trader", exact=True).click()
+    expect(page.locator(".pin-separator")).to_have_count(0)
+    expect(page.locator(".icon-star-filled")).to_have_count(0)
+    page.get_by_role("button", name="Edit trader", exact=True).click()
+    expect(page.locator("#edit-recovery-button")).to_be_visible()
+    page.get_by_role("button", name="Cancel", exact=True).click()
+    page.get_by_role("button", name="Edit alice", exact=True).click()
+    expect(page.locator("#edit-recovery-button")).not_to_be_visible()
+    expect(page.locator(".account-card .steam-button").filter(has_text="Recovery")).to_have_count(0)
+
+
+def test_login_wrong_password_show_control_and_damaged_storage(browser_page):
+    page = browser_page
+    page.locator("#lock-button").click()
+    form = page.locator("#password-login-form")
+    form.locator('[name="username"]').fill("test-owner")
+    form.locator('[name="password"]').fill("wrong-password")
+    page.locator("#show-login-password").click()
+    expect(form.locator('[name="password"]')).to_have_attribute("type", "text")
+    page.get_by_role("button", name="Sign in", exact=True).click()
+    expect(page.locator("#login-error")).to_contain_text("Incorrect username or password")
+    expect(form.locator('[name="password"]')).to_have_attribute("type", "password")
+    expect(form.locator('[name="password"]')).to_have_value("")
+    page.evaluate(
+        """localStorage.setItem('winauth.remembered-login.v1', JSON.stringify({
+            version: 1, iterations: 600000, salt: 'A', iv: 'A', ciphertext: 'A'
+        }))"""
+    )
+    page.reload()
+    expect(page.locator("#login-error")).to_contain_text("Saved login is damaged")
+    page.locator("#forget-login").click()
+    page.evaluate(
+        "() => {Storage.prototype.removeItem = () => {throw new DOMException('Storage blocked', 'SecurityError')};}"
+    )
+    page.locator("#confirm-forget").click()
+    expect(page.locator("#forget-error")).to_contain_text("Could not remove the saved login")
+    expect(page.locator("#forget-dialog")).to_be_visible()
+    page.reload()
+    page.locator("#forget-login").click()
+    page.locator("#confirm-forget").click()
+    sign_in(page)
+
+
+def test_failed_pin_storage_signs_out_instead_of_silently_remembering(browser_page):
+    page = browser_page
+    page.locator("#lock-button").click()
+    expect(page.locator("#password-login-form")).to_be_visible()
+    page.evaluate(
+        "() => {Storage.prototype.setItem = () => {throw new DOMException('Storage full', 'QuotaExceededError')};}"
+    )
+    form = page.locator("#password-login-form")
+    form.locator('[name="username"]').fill("test-owner")
+    form.locator('[name="password"]').fill("synthetic-browser-test-password")
+    page.locator("#remember-browser").check()
+    form.locator('[name="new_pin"]').fill("80726391")
+    form.locator('[name="confirm_pin"]').fill("80726391")
+    page.get_by_role("button", name="Sign in", exact=True).click()
+    expect(page.locator("#login-error")).to_contain_text("could not save the PIN")
+    assert page.evaluate("localStorage.getItem('winauth.remembered-login.v1')") is None
+    assert (
+        page.evaluate(
+            "fetch('/api/accounts', {headers:{'X-Requested-With':'WinAuthReborn'}}).then(response=>response.status)"
+        )
+        == 401
+    )
+    page.locator("#remember-browser").uncheck()
+    sign_in(page)
