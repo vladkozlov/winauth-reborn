@@ -389,7 +389,9 @@ def test_service_worker_update_preserves_vault_and_other_apps_caches(
         assert stored_envelope(page) == original_envelope
         names = page.evaluate("caches.keys()")
         assert "unrelated-app-cache" in names
-        assert any(name.endswith("-update") for name in names)
+        assert any(name.endswith("-update") for name in names), (
+            f"Updated PWA cache is missing: {names}"
+        )
         assert not any(name.endswith(fingerprint) for name in names), (
             f"Stale PWA cache remains after update: {names}"
         )
