@@ -394,3 +394,70 @@ def test_service_worker_update_preserves_vault_and_other_apps_caches(
     finally:
         worker_path.write_text(original)
         os.utime(worker_path, (original_stat.st_atime, original_stat.st_mtime))
+
+
+@pytest.mark.parametrize(
+    ("worker_state", "accept"),
+    [("installed", True), ("activated", True), ("activated", False)],
+)
+def test_update_handles_worker_transition_during_confirmation(
+    chromium, static_browser, worker_state, accept
+):
+    context = chromium.new_context()
+    try:
+        page = context.new_page()
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.add_init_script(
+            """(() => {
+              const worker = new EventTarget();
+              worker.state = 'installed';
+              const registration = new EventTarget();
+              registration.waiting = worker;
+              const container = new EventTarget();
+              container.controller = new EventTarget();
+              container.register = async () => registration;
+              container.ready = Promise.resolve(registration);
+              worker.postMessage = (message) => {
+                sessionStorage.setItem('test-update-message', message);
+                worker.state = 'activated';
+                registration.waiting = null;
+                container.controller = worker;
+                worker.dispatchEvent(new Event('statechange'));
+                container.dispatchEvent(new Event('controllerchange'));
+              };
+              Object.defineProperty(navigator, 'serviceWorker', {value: container});
+              window.testUpdate = {worker, registration, container};
+            })()"""
+        )
+        page.goto(static_browser[0])
+        expect(page.locator("#pwa-update")).to_be_visible()
+        page.evaluate(
+            """({workerState, accept}) => {
+              window.confirm = () => {
+                testUpdate.registration.waiting = null;
+                testUpdate.worker.state = workerState;
+                if (workerState === 'activated') {
+                  testUpdate.container.controller = testUpdate.worker;
+                  testUpdate.container.dispatchEvent(new Event('controllerchange'));
+                }
+                return accept;
+              };
+            }""",
+            {"workerState": worker_state, "accept": accept},
+        )
+        navigations = []
+        page.on("framenavigated", lambda frame: navigations.append(frame.url))
+        if accept:
+            with page.expect_navigation(timeout=5000):
+                page.locator("#pwa-update").click()
+            assert len(navigations) == 1
+            expected = "ACTIVATE_UPDATE" if worker_state == "installed" else None
+            assert page.evaluate("sessionStorage.getItem('test-update-message')") == expected
+        else:
+            page.locator("#pwa-update").click()
+            assert navigations == []
+            assert page.evaluate("sessionStorage.getItem('test-update-message')") is None
+        assert errors == []
+    finally:
+        context.close()

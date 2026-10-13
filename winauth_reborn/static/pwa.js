@@ -35,16 +35,44 @@
       return;
     }
     let reloading = false;
+    const reload = () => {
+      if (!reloading) { reloading = true; location.reload(); }
+    };
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (!reloading && update.dataset.accepted === "true") { reloading = true; location.reload(); }
+      if (update.dataset.accepted === "true") reload();
     });
     const watchUpdate = () => {
-      if (!registration.waiting) return;
-      update.hidden = false;
+      const worker = registration.waiting;
+      update.hidden = !worker;
+      if (!worker) return;
       update.onclick = () => {
-        if (window.confirm("Update the app now? Open changes will be discarded and a browser vault will lock.")) {
-          update.dataset.accepted = "true";
-          registration.waiting.postMessage("ACTIVATE_UPDATE");
+        if (!window.confirm("Update the app now? Open changes will be discarded and a browser vault will lock.")) return;
+        if (worker.state === "redundant") {
+          status("This update is no longer available. Reload to check for a newer version.");
+          watchUpdate();
+          return;
+        }
+        update.dataset.accepted = "true";
+        update.disabled = true;
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "activated") reload();
+          else if (worker.state === "redundant") {
+            update.dataset.accepted = "false";
+            update.disabled = false;
+            status("App update failed. Reload to check for a newer version.");
+            watchUpdate();
+          }
+        });
+        if (worker.state === "activated" || navigator.serviceWorker.controller === worker) {
+          reload();
+        } else {
+          try { worker.postMessage("ACTIVATE_UPDATE"); }
+          catch (error) {
+            update.dataset.accepted = "false";
+            update.disabled = false;
+            status(`Could not activate the update: ${error.message}`);
+            watchUpdate();
+          }
         }
       };
     };
@@ -55,6 +83,7 @@
       watchUpdate();
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
+        if (!worker) { watchUpdate(); return; }
         worker.addEventListener("statechange", () => {
           if (worker.state === "installed") watchUpdate();
           if (worker.state === "redundant") status("Offline setup failed. Check your connection and reload to retry.");

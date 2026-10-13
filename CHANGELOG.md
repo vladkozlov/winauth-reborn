@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Fixed PWA update races when a waiting worker activates during the confirmation
+  dialog, preserving explicit consent and reloading only once.
+- Fixed Compose validation in fresh GitHub Actions checkouts by creating a local
+  configuration fixture from `.env.example`; no private credentials are needed.
+
 ## 0.4.0
 
 - Added a separate backend-free browser artifact reusing the modern UI, with
