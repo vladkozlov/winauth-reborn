@@ -1,0 +1,21 @@
+.login-page { min-height: 100svh; display: grid; place-items: center; padding: 40px 24px; background: radial-gradient(ellipse at 15% 20%, #b4ef8210, transparent 60%), var(--bg); }
+.login-shell { width: 100%; max-width: 990px; display: grid; grid-template-columns: 1fr 420px; gap: 70px; align-items: center; }
+.login-story h1 { font-size: clamp(42px, 5vw, 64px); letter-spacing: -2.5px; line-height: 1.1; margin: 22px 0; }
+.login-story > p { color: var(--muted); line-height: 1.9; margin-bottom: 30px; }
+.login-feature { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); margin: 14px 0; }
+.login-panel { padding: 32px; background: var(--panel); border: 1px solid var(--border); border-radius: 19px; box-shadow: 0 24px 70px #0001; min-width: 0; }
+.login-brand { margin: 0 0 34px; }
+.login-panel h2 { font-size: 25px; margin-bottom: 5px; }
+.login-panel .field { margin: 18px 0; }
+.login-submit { width: 100%; margin-top: 5px; }
+.login-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid var(--border); margin-top: 26px; padding-top: 18px; }
+#secure-context-note { font-size: 11px; margin: 15px 0 0; }
+#login-error { margin-bottom: 15px; }
+#pin-view input { font-family: ui-monospace, monospace; letter-spacing: 4px; font-size: 18px; }
+#pin-setup .banner { font-size: 11px; }
+@media (max-width: 760px) {
+  .login-shell { max-width: 430px; grid-template-columns: 1fr; gap: 0; }
+  .login-story { display: none; }
+  .login-panel { padding: 26px; }
+  .login-page { padding: 24px 16px; }
+}

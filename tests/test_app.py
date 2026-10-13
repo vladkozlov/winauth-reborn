@@ -19,6 +19,13 @@ def test_basic_auth_covers_html_static_and_api(client, path, credentials):
     if credentials:
         headers["Authorization"] = "Basic " + base64.b64encode(credentials.encode()).decode()
     response = client.get(path, headers=headers)
+    if path == "/":
+        assert response.status_code == 302
+        assert response.headers["Location"] == "/login"
+        return
+    if path == "/static/app.css":
+        assert response.status_code == 200
+        return
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"].startswith("Basic ")
     assert SECRET not in response.text

@@ -37,6 +37,8 @@ def live_app(tmp_path):
             "DATA_DIR": tmp_path / "vault",
             "AUTH_USERNAME": "test-owner",
             "AUTH_PASSWORD": "synthetic-browser-test-password",
+            "AUTH_PASSWORD_HASH": "",
+            "HTTPS_ONLY": False,
         }
     )
     steam = app.extensions["steam"]
@@ -79,10 +81,6 @@ def browser_page(live_app):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         context = browser.new_context(
-            http_credentials={
-                "username": "test-owner",
-                "password": "synthetic-browser-test-password",
-            },
             permissions=["clipboard-read", "clipboard-write"],
             viewport={"width": 1440, "height": 1000},
         )
@@ -90,11 +88,23 @@ def browser_page(live_app):
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(live_app[2])
+        sign_in(page)
         expect(page.locator("#empty-state")).to_be_visible()
         yield page
         assert errors == []
         context.close()
         browser.close()
+
+
+def sign_in(page, pin=None):
+    page.locator('#password-login-form [name="username"]').fill("test-owner")
+    page.locator('#password-login-form [name="password"]').fill("synthetic-browser-test-password")
+    if pin:
+        page.locator("#remember-browser").check()
+        page.locator('#password-login-form [name="new_pin"]').fill(pin)
+        page.locator('#password-login-form [name="confirm_pin"]').fill(pin)
+    page.get_by_role("button", name="Sign in", exact=True).click()
+    expect(page.locator("#empty-state")).to_be_visible()
 
 
 def import_sample(page):

@@ -4,10 +4,12 @@ import base64
 import os
 import secrets
 import time
+from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, redirect, render_template, request, session
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -27,6 +29,10 @@ def create_app(config: dict | None = None) -> Flask:
         DATA_DIR=os.environ.get("WINAUTH_DATA_DIR", "./data"),
         HTTPS_ONLY=os.environ.get("WINAUTH_HTTPS_ONLY", "false").lower() == "true",
         MAX_CONTENT_LENGTH=2 * 1024 * 1024,
+        SESSION_COOKIE_NAME="winauth_session",
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Strict",
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
     )
     if config:
         app.config.update(config)
@@ -40,15 +46,45 @@ def create_app(config: dict | None = None) -> Flask:
     steam = SteamService()
     app.extensions.update(vault=vault, steam=steam)
     csrf = secrets.token_urlsafe(32)
+    app.secret_key = secrets.token_bytes(32)
+    app.config["SESSION_COOKIE_SECURE"] = app.config["HTTPS_ONLY"]
 
     @app.before_request
     def authenticate():
+        public_asset = request.endpoint == "static" and request.view_args.get("filename") in {
+            "app.css",
+            "login.css",
+            "login.js",
+        }
+        if request.endpoint == "login_page" or public_asset:
+            return None
+        browser_login = request.endpoint == "browser_login"
         auth = request.authorization
-        username_ok = auth is not None and secrets.compare_digest(
-            (auth.username or "").encode(), app.config["AUTH_USERNAME"].encode()
+        username_ok = (
+            auth is not None
+            and auth.type == "basic"
+            and secrets.compare_digest(
+                (auth.username or "").encode(), app.config["AUTH_USERNAME"].encode()
+            )
         )
-        password_ok = check_password_hash(password_hash, (auth.password or "")) if auth else False
-        if not (username_ok and password_ok):
+        cookie_ok = session.get("authenticated") is True and not session.get("locked")
+        password_ok = (
+            check_password_hash(password_hash, (auth.password or ""))
+            if auth and (browser_login or not cookie_ok)
+            else False
+        )
+        authenticated = (username_ok and password_ok) or (cookie_ok and not browser_login)
+        if session.get("locked") and not browser_login:
+            authenticated = False
+        if not authenticated:
+            if request.endpoint == "index":
+                return redirect("/login")
+            if browser_login or request.headers.get("X-Requested-With") == "WinAuthReborn":
+                return jsonify(
+                    error="Incorrect username or password."
+                    if browser_login
+                    else "Sign in to access your vault."
+                ), 401
             return Response(
                 "Authentication required.",
                 401,
@@ -56,6 +92,19 @@ def create_app(config: dict | None = None) -> Flask:
                     "WWW-Authenticate": 'Basic realm="WinAuth Reborn", charset="UTF-8"',
                 },
             )
+        if browser_login:
+            origin = request.headers.get("Origin")
+            if origin:
+                parsed = urlsplit(origin)
+                if (
+                    parsed.scheme not in {"http", "https"}
+                    or parsed.netloc != request.host
+                    or (app.config["HTTPS_ONLY"] and parsed.scheme != "https")
+                ):
+                    return jsonify(error="Login must come from this application's origin."), 403
+            if request.headers.get("X-Requested-With") != "WinAuthReborn" or not request.is_json:
+                return jsonify(error="Use the login page to start a browser session."), 403
+            return None
         if request.method not in {"GET", "HEAD", "OPTIONS"} and not secrets.compare_digest(
             request.headers.get("X-CSRF-Token", "").encode(), csrf.encode()
         ):
@@ -116,6 +165,23 @@ def create_app(config: dict | None = None) -> Flask:
         if not record["steam_data"].get("identity_secret"):
             raise ValueError("Steam confirmations require identity_secret in the exported data.")
         return record
+
+    @app.get("/login")
+    def login_page():
+        return render_template("login.html")
+
+    @app.post("/api/login")
+    def browser_login():
+        body()
+        session.clear()
+        session["authenticated"] = True
+        return jsonify(ok=True, csrf=csrf)
+
+    @app.post("/api/logout")
+    def browser_logout():
+        session.clear()
+        session["locked"] = True
+        return jsonify(ok=True)
 
     @app.get("/")
     def index():

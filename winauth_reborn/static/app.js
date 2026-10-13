@@ -36,10 +36,14 @@ async function api(path, options = {}) {
     credentials: "same-origin",
     cache: "no-store",
     ...options,
-    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf, ...options.headers },
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf,
+      "X-Requested-With": "WinAuthReborn", ...options.headers },
   });
   if (!response.ok) {
-    if (response.status === 401) throw new Error("Authentication expired. Reload to sign in.");
+    if (response.status === 401) {
+      goToLogin();
+      throw new Error("Authentication expired. Sign in again.");
+    }
     let message = `Request failed (${response.status}).`;
     if ((response.headers.get("Content-Type") || "").includes("application/json")) {
       message = (await response.json()).error || message;
@@ -442,6 +446,24 @@ async function exportBackup() {
 }
 $("#export-button").onclick = exportBackup;
 $("#mobile-export-button").onclick = exportBackup;
+
+function goToLogin() {
+  clearRecovery();
+  hotpCodes.clear();
+  revealedCodes.clear();
+  accounts = [];
+  $("#accounts").replaceChildren();
+  window.location.replace("/login");
+}
+$("#lock-button").onclick = async () => {
+  const button = $("#lock-button");
+  button.disabled = true;
+  try {
+    await json("/api/logout", { method: "POST" });
+    goToLogin();
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; }
+};
 
 function setSteamConnected(connected) {
   $("#steam-connect").hidden = connected;

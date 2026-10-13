@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Sign in - WinAuth Reborn</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+  <script src="{{ url_for('static', filename='login.js') }}" defer></script>
+</head>
+<body class="login-page">
+  <div class="login-shell">
+    <section class="login-story" aria-label="Your private authenticator">
+      <span class="eyebrow">WELCOME TO YOUR PRIVATE WORKSPACE</span>
+      <h1>Your keys.<br>Your space.</h1>
+      <p>A quiet place for your authenticators.<br>Self-hosted, encrypted, and yours to keep.</p>
+      <div class="login-feature"><span class="status-dot"></span> No analytics or third-party requests</div>
+      <div class="login-feature"><span class="status-dot"></span> The same Basic Auth credentials</div>
+      <div class="login-feature"><span class="status-dot"></span> Optional encrypted PIN unlock</div>
+    </section>
+    <section class="login-panel" aria-labelledby="login-title">
+      <a class="brand login-brand" href="/login"><span class="brand-mark">W</span><span>WinAuth<span class="brand-sub">REBORN</span></span></a>
+      <h2 id="login-title">Welcome back.</h2>
+      <p id="login-subtitle" class="muted">Sign in with your server's Basic Auth credentials.</p>
+      <div id="login-error" class="form-error" role="alert"></div>
+      <div id="password-view">
+        <form id="password-login-form">
+          <label class="field">Username<input name="username" autocomplete="username" required maxlength="200"></label>
+          <label class="field">Password<div class="secret-row"><input name="password" type="password" autocomplete="current-password" required maxlength="1000"><button class="button secondary small" type="button" id="show-login-password" aria-pressed="false">Show</button></div></label>
+          <label class="check-field"><input id="remember-browser" name="remember" type="checkbox"> Remember this browser with a PIN</label>
+          <div id="pin-setup" hidden>
+            <label class="field">Create PIN<input name="new_pin" type="password" inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12" autocomplete="off" placeholder="6-12 digits"></label>
+            <label class="field">Confirm PIN<input name="confirm_pin" type="password" inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12" autocomplete="off"></label>
+            <p class="banner">Your credentials are encrypted in this browser using the PIN. Use a long, random PIN on a trusted device. This is a convenience feature, not two-factor authentication.</p>
+          </div>
+          <button class="button primary login-submit" type="submit">Sign in</button>
+        </form>
+        <button class="text-button" id="use-saved-pin" type="button" hidden>Use saved PIN instead &rarr;</button>
+      </div>
+      <div id="pin-view" hidden>
+        <form id="pin-login-form">
+          <label class="field">Your PIN<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6,12}" minlength="6" maxlength="12" autocomplete="off" required placeholder="Enter your PIN"></label>
+          <button class="button primary login-submit" type="submit">Unlock vault</button>
+        </form>
+        <button class="text-button" id="use-password" type="button">Use username and password instead &rarr;</button>
+      </div>
+      <div class="login-footer"><span class="private-badge"><span class="status-dot"></span> Private by design</span><button class="text-button" id="forget-login" type="button" hidden>Forget saved login</button></div>
+      <p id="secure-context-note" class="muted">Use HTTPS when accessing this server over a network.</p>
+    </section>
+  </div>
+  <dialog id="forget-dialog" class="confirm-dialog" aria-labelledby="forget-title">
+    <h2 id="forget-title">Forget this browser?</h2>
+    <p>This removes only the encrypted login saved in this browser. Your vault, accounts, and server credentials stay unchanged.</p>
+    <div id="forget-error" class="form-error" role="alert"></div>
+    <div class="dialog-actions"><button class="button secondary" id="cancel-forget">Cancel</button><button class="button primary danger" id="confirm-forget">Forget login</button></div>
+  </dialog>
+</body>
+</html>
