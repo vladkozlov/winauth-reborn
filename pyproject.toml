@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "winauth-reborn"
+version = "0.1.0"
+description = "A private, self-hosted web authenticator compatible with WinAuth text exports"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: Flask",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security",
+]
+dependencies = [
+  "Flask>=3.1,<4",
+  "cryptography>=44,<47",
+  "requests>=2.32.4,<3",
+  "python-dotenv>=1.0,<2",
+  "waitress>=3.0.2,<4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1", "playwright>=1.50,<2", "build>=1.2,<2"]
+
+[tool.setuptools.packages.find]
+include = ["winauth_reborn*"]
+
+[tool.setuptools.package-data]
+winauth_reborn = ["templates/*.html", "static/*.css", "static/*.js"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM"]

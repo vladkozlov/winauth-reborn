@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf }}">
+  <meta name="color-scheme" content="dark light">
+  <title>WinAuth Reborn</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="WinAuth Reborn home">
+      <span class="brand-mark">W</span><span>WinAuth<span class="brand-sub">REBORN</span></span>
+    </a>
+    <div class="nav-caption">YOUR WORKSPACE</div>
+    <button class="nav-item active" id="all-filter"><span aria-hidden="true">&#9638;</span> Authenticators <span id="account-count" class="count">0</span></button>
+    <button class="nav-item" id="steam-filter"><span aria-hidden="true">&#8644;</span> Steam accounts</button>
+    <div class="sidebar-bottom">
+      <div class="private-badge"><span class="status-dot"></span> Private by design</div>
+      <p>Secrets encrypted on disk.<br>No analytics. No cloud sync.</p>
+      <button class="text-button" id="export-button">Export backup &rarr;</button>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div><span class="eyebrow">A FRESH START FOR YOUR AUTHENTICATORS</span><h1>Your codes, one place.</h1></div>
+      <div class="header-actions">
+        <button class="button secondary" id="privacy-button" aria-pressed="false">Hide codes</button>
+        <button class="button primary" id="import-button"><span aria-hidden="true">+</span> Import authenticators</button>
+      </div>
+    </header>
+    <section class="overview" aria-label="Overview">
+      <div><span class="overview-label">AUTHENTICATORS</span><strong id="total-stat">0</strong></div>
+      <div><span class="overview-label">STEAM ACCOUNTS</span><strong id="steam-stat">0</strong></div>
+      <div class="overview-note"><span class="status-dot"></span><span>Ready when you are.<small>Click a code to copy it securely.</small></span></div>
+    </section>
+    <div class="toolbar">
+      <label class="search"><span aria-hidden="true">&#8981;</span><input id="search" type="search" placeholder="Search accounts or services..." aria-label="Search authenticators"></label>
+      <span class="muted" id="results-label">Loading your vault...</span>
+    </div>
+    <div id="connection-error" class="banner error" role="alert" hidden></div>
+    <section id="accounts" class="account-grid" aria-label="Authenticators" aria-busy="true"></section>
+    <section id="empty-state" class="empty-state" hidden>
+      <div class="empty-mark" aria-hidden="true">&#10022;</div>
+      <h2>Your next chapter starts here.</h2>
+      <p>Bring your existing WinAuth authenticators with you.<br>Import your original .txt export to get started.</p>
+      <button class="button primary" id="empty-import">Import WinAuth .txt</button>
+      <span class="muted">TOTP &middot; HOTP &middot; Steam Guard &middot; Battle.net</span>
+    </section>
+    <p id="no-results" class="empty-state" hidden>No matching authenticators.</p>
+    <footer>WinAuth Reborn <span>&middot;</span> Self-hosted. Yours to keep. <button class="text-button mobile-only" id="mobile-export-button">Export backup</button><span id="refresh-status"></span></footer>
+  </main>
+
+  <dialog id="import-dialog" aria-labelledby="import-title">
+    <div class="dialog-heading"><div><span class="eyebrow">BRING YOUR ACCOUNTS</span><h2 id="import-title">Import authenticators</h2></div><button class="close-button" data-close aria-label="Close import">&times;</button></div>
+    <p class="muted">Use the original WinAuth plain-text export. Each line contains an otpauth URI; Steam's extra data is preserved.</p>
+    <form id="import-form">
+      <label class="dropzone" id="dropzone" tabindex="0">
+        <span class="upload-symbol" aria-hidden="true">&uarr;</span><strong id="file-label">Choose a .txt file or drop it here</strong>
+        <span class="muted">UTF-8 text &middot; Up to 2 MB</span>
+        <input id="import-file" type="file" accept=".txt,text/plain" class="visually-hidden">
+      </label>
+      <label class="field">Or paste otpauth URIs<textarea id="import-text" rows="4" placeholder="otpauth://totp/Service:account?secret=..." spellcheck="false" autocomplete="off"></textarea></label>
+      <div class="banner">This file contains your private authenticator secrets. Import only on your own trusted server over HTTPS.</div>
+      <div class="form-error" id="import-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close>Cancel</button><button class="button primary" type="submit">Import accounts</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="steam-dialog" class="wide-dialog" aria-labelledby="steam-title">
+    <div class="dialog-heading"><div><span class="eyebrow">STEAM GUARD</span><h2 id="steam-title">Steam confirmations</h2></div><button class="close-button" data-close aria-label="Close Steam">&times;</button></div>
+    <p id="steam-account-name" class="muted"></p>
+    <div id="steam-error" class="form-error" role="alert"></div>
+    <section id="steam-connect">
+      <p>Connect to review trade and market confirmations. Your Steam password is used only for login and is never stored.</p>
+      <form id="steam-login-form">
+        <label class="field">Steam account name<input name="username" autocomplete="username" required maxlength="200"></label>
+        <label class="field">Steam password<input name="password" type="password" autocomplete="current-password" required maxlength="1000"></label>
+        <button class="button primary" type="submit">Connect Steam</button>
+      </form>
+      <form id="steam-code-form" hidden>
+        <label class="field">Code from Steam's email<input name="code" autocomplete="one-time-code" required maxlength="20"></label>
+        <button class="button primary" type="submit">Verify email code</button>
+      </form>
+      <details class="cookie-details"><summary>Alternative: use an existing Steam session</summary>
+        <p class="muted">In your own logged-in Steam Community browser session, copy the <code>steamLoginSecure</code> cookie value from developer tools. Treat it like a password. It will expire.</p>
+        <form id="steam-cookie-form">
+          <label class="field">SteamID64<input name="steam_id" inputmode="numeric" required maxlength="17" placeholder="7656119..."></label>
+          <label class="field">steamLoginSecure cookie<input name="cookie" type="password" required autocomplete="off"></label>
+          <button class="button secondary" type="submit">Connect session</button>
+        </form>
+      </details>
+    </section>
+    <section id="steam-connected" hidden>
+      <div class="steam-toolbar"><span class="private-badge"><span class="status-dot"></span> Steam connected</span><div><button class="button secondary small" id="refresh-confirmations">Refresh</button><button class="text-button" id="disconnect-steam">Disconnect</button></div></div>
+      <p class="banner">Review the recipient and summary carefully. Approving may authorize a trade or market listing. Nothing is approved automatically.</p>
+      <div id="confirmations"></div>
+    </section>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title">
+    <h2 id="confirm-title">Are you sure?</h2><p id="confirm-message"></p>
+    <div class="dialog-actions"><button class="button secondary" id="confirm-cancel">Cancel</button><button class="button primary" id="confirm-ok">Continue</button></div>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
