@@ -75,15 +75,15 @@
       };
       worker.postMessage("ACTIVATE_UPDATE", [channel.port2]);
     });
-    const watchUpdate = () => {
-      const waitingWorker = registration.waiting;
+    const watchUpdate = (candidate = registration.waiting) => {
+      const waitingWorker = registration.waiting || candidate;
       update.hidden = !waitingWorker;
       if (!waitingWorker) {
         update.onclick = null;
         return;
       }
       update.onclick = () => {
-        const worker = registration.waiting;
+        const worker = registration.waiting || waitingWorker;
         if (!worker) {
           watchUpdate();
           return;
@@ -145,7 +145,7 @@
         const worker = registration.installing;
         if (!worker) { watchUpdate(); return; }
         worker.addEventListener("statechange", () => {
-          if (worker.state === "installed") watchUpdate();
+          if (worker.state === "installed") watchUpdate(worker);
           if (worker.state === "redundant") status("Offline setup failed. Check your connection and reload to retry.");
         });
       });

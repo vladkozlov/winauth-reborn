@@ -381,6 +381,12 @@ def test_service_worker_update_preserves_vault_and_other_apps_caches(
         os.utime(worker_path, (original_stat.st_atime, original_stat.st_mtime + 2))
         page.evaluate("navigator.serviceWorker.ready.then(registration => registration.update())")
         expect(page.locator("#pwa-update")).to_be_visible()
+        page.wait_for_function(
+            """async () => {
+              const registration = await navigator.serviceWorker.getRegistration();
+              return registration.waiting?.state === "installed";
+            }"""
+        )
         before_click = page.evaluate(
             """async () => {
               const registration = await navigator.serviceWorker.getRegistration();
