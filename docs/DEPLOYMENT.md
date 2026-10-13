@@ -78,8 +78,9 @@ vault in the `vault` named volume. No source checkout or image build is needed.
 If Steam rate-limits the VPS's public IP, you can route the app's Steam traffic
 through a SOCKS5h proxy running on a trusted machine, such as a Raspberry Pi at
 home. Establish a private network tunnel such as WireGuard between the VPS and
-the Pi, and make the proxy reachable only over that tunnel. **Do not expose an
-unauthenticated SOCKS port to the public internet.**
+the Pi, and make the proxy reachable only over that tunnel. SOCKS5 username and
+password authentication does not encrypt credentials in transit; **do not expose
+the proxy port to the public internet**, even when it requires a password.
 
 Add the proxy's tunnel address to the server's private `.env`:
 
@@ -88,10 +89,17 @@ WINAUTH_STEAM_PROXY=socks5h://10.10.0.2:1080
 ```
 
 Use `socks5h` (not `socks5`) so Steam hostnames are resolved by the proxy side.
-The setting applies to Steam login, time sync, and confirmation requests; normal
-browser traffic to WinAuth is unaffected. Recreate the container after changing
-`.env`. A proxy does not bypass Steam limits, and requests can still be throttled
-if the home IP or Steam account is rate-limited.
+The server edition also lets the authenticated owner configure a custom proxy or
+choose direct/server-default routing in **Settings > Steam network**. A custom
+URL can include proxy username/password credentials, for example
+`socks5h://user:password@10.10.0.2:1080`; percent-encode reserved characters.
+The URL is stored encrypted in the server vault and never returned to the
+browser. Applying a setting immediately affects new Steam requests; in-flight
+requests may finish using the previous route. This UI override takes precedence
+over `WINAUTH_STEAM_PROXY`, while **Use server default** returns to the
+environment setting. Normal browser traffic to WinAuth is unaffected. A proxy
+does not bypass Steam limits, and requests can still be throttled if the home IP
+or Steam account is rate-limited.
 
 ### HTTPS with Caddy
 
