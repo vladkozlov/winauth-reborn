@@ -75,8 +75,8 @@
       };
       worker.postMessage("ACTIVATE_UPDATE", [channel.port2]);
     });
-    const watchUpdate = (candidate = registration.waiting) => {
-      const waitingWorker = registration.waiting || candidate;
+    const watchUpdate = () => {
+      const waitingWorker = registration.waiting;
       update.hidden = !waitingWorker;
       if (!waitingWorker) {
         update.onclick = null;
@@ -145,8 +145,12 @@
         const worker = registration.installing;
         if (!worker) { watchUpdate(); return; }
         worker.addEventListener("statechange", () => {
-          if (worker.state === "installed") watchUpdate(worker);
-          if (worker.state === "redundant") status("Offline setup failed. Check your connection and reload to retry.");
+          if (worker.state === "installed") setTimeout(watchUpdate, 0);
+          if (worker.state === "activated") watchUpdate();
+          if (worker.state === "redundant") {
+            status("Offline setup failed. Check your connection and reload to retry.");
+            watchUpdate();
+          }
         });
       });
       await navigator.serviceWorker.ready;

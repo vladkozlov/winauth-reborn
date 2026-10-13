@@ -69,6 +69,22 @@ def browser_edition(chromium, static_browser):
     page.locator("#browser-unlock-submit").click()
     expect(page.locator("#empty-state")).to_be_visible()
     page.wait_for_function("navigator.serviceWorker.controller !== null")
+    initial_worker_state = page.evaluate(
+        """async () => {
+          const registration = await navigator.serviceWorker.getRegistration();
+          const inspect = worker => worker && {
+            state: worker.state,
+            scriptURL: worker.scriptURL
+          };
+          return {
+            controller: inspect(navigator.serviceWorker.controller),
+            active: inspect(registration.active),
+            waiting: inspect(registration.waiting),
+            installing: inspect(registration.installing)
+          };
+        }"""
+    )
+    assert not page.locator("#pwa-update").is_visible(), initial_worker_state
     yield page
     assert errors == []
     assert all(url.startswith(static_browser[0]) for url in requests)
