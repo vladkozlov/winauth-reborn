@@ -14,6 +14,7 @@
   <script src="{{ url_for('static', filename='browser-tokens.js') }}" defer></script>
   <script src="{{ url_for('static', filename='browser-vault.js') }}" defer></script>
   {% endif %}
+  <script src="{{ url_for('static', filename='qr-decoder.js') }}" defer></script>
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   <script src="{{ url_for('static', filename='editor.js') }}" defer></script>
   <script src="{{ url_for('static', filename='settings.js') }}" defer></script>
@@ -90,6 +91,16 @@
     <div class="dialog-heading"><div><span class="eyebrow">ADD AUTHENTICATOR</span><h2 id="add-totp-title">Add a TOTP</h2></div><button class="close-button" data-close aria-label="Close add TOTP">&times;</button></div>
     <p class="muted">Enter the shared key provided by the service when you set up an authenticator. This adds codes to WinAuth Reborn; it does not register or change an authenticator with that service.</p>
     <form id="add-totp-form">
+      <section class="qr-import" aria-label="Import from QR code">
+        <div class="qr-actions">
+          <button class="button secondary small" id="qr-camera-button" type="button">Scan with camera</button>
+          <button class="button secondary small" id="qr-image-button" type="button">Choose QR image</button>
+          <input id="qr-image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" class="visually-hidden">
+        </div>
+        <video id="qr-camera" class="qr-camera" playsinline muted hidden aria-label="Camera preview for QR scanning"></video>
+        <div id="qr-error" class="form-error" role="status" aria-live="polite"></div>
+        <p class="muted">QR decoding happens on this device. Camera access requires HTTPS or localhost.</p>
+      </section>
       <div class="field-grid">
         <label class="field">Account name<input name="name" required maxlength="200" autocomplete="off" placeholder="alice@example.com"></label>
         <label class="field">Service / issuer<input name="issuer" maxlength="200" autocomplete="off" placeholder="Example"></label>

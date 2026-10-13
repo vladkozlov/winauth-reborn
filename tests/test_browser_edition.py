@@ -8,6 +8,7 @@ import os
 import re
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
 import pytest
@@ -257,6 +258,23 @@ def test_add_totp_manually_in_browser_vault(browser_edition):
         "Browser Example",
         8,
     )
+
+
+def test_add_totp_from_qr_image_in_browser_vault(browser_edition):
+    page = browser_edition
+    page.locator("#add-totp-button").click()
+    page.locator("#qr-image-file").set_input_files(
+        str(Path(__file__).parent / "fixtures" / "totp-qr.png")
+    )
+    expect(page.locator("#qr-error")).to_contain_text("QR decoded on this device")
+    form = page.locator("#add-totp-form")
+    expect(form.locator('[name="name"]')).to_have_value("qr-user")
+    form.get_by_role("button", name="Add TOTP", exact=True).click()
+    expect(page.locator(".account-card")).to_have_count(1)
+    text = page.evaluate(
+        "() => browserVault.request('/api/export', {method:'POST'}).then(r => r.text())"
+    )
+    assert "x-fixture=kept" in text
 
 
 def test_atomic_imports_duplicate_preservation_edit_preferences_and_export(browser_edition):
