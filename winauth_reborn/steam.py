@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import logging
 import secrets
 import struct
 import threading
@@ -16,6 +17,7 @@ from .authenticators import generate_code, validate_steam_id
 
 API = "https://api.steampowered.com"
 COMMUNITY = "https://steamcommunity.com"
+logger = logging.getLogger(__name__)
 
 
 class SteamError(Exception):
@@ -42,6 +44,7 @@ class SteamService:
 
     @staticmethod
     def request(session: requests.Session, method: str, url: str, **kwargs) -> dict:
+        response = None
         try:
             response = session.request(
                 method, url, timeout=(5, 20), allow_redirects=False, **kwargs
@@ -51,6 +54,18 @@ class SteamService:
                 raise SteamError("Steam redirected the request. Your session may have expired.")
             body = response.json()
         except requests.RequestException as exc:
+            failed_response = getattr(exc, "response", None) or response
+            parsed_url = urlsplit(url)
+            logger.warning(
+                "Steam request failed: method=%s host=%s path=%s error=%s status=%s "
+                "content_type=%s",
+                method,
+                parsed_url.hostname,
+                parsed_url.path,
+                type(exc).__name__,
+                getattr(failed_response, "status_code", None),
+                getattr(failed_response, "headers", {}).get("Content-Type"),
+            )
             raise SteamError(
                 "Steam could not be reached or returned invalid data. Try again later."
             ) from exc

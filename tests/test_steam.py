@@ -530,6 +530,27 @@ def test_steam_request_errors(response, message):
         SteamService.request(session, "GET", COMMUNITY + "/fixture")
 
 
+def test_steam_request_failure_logs_sanitized_upstream_details(caplog):
+    session = ScriptedSession(
+        [
+            (
+                "GET",
+                "/mobileconf/getlist?key=secret-signature",
+                Response({}, status=403, headers={"Content-Type": "text/html"}),
+            ),
+        ]
+    )
+    with pytest.raises(SteamError, match="could not be reached"):
+        SteamService.request(
+            session,
+            "GET",
+            COMMUNITY + "/mobileconf/getlist?key=secret-signature",
+        )
+    assert "method=GET host=steamcommunity.com path=/mobileconf/getlist" in caplog.text
+    assert "error=HTTPError status=403 content_type=text/html" in caplog.text
+    assert "secret-signature" not in caplog.text
+
+
 @pytest.mark.parametrize("result", ["1", "29"])
 def test_steam_request_allowed_results(result):
     session = ScriptedSession(
