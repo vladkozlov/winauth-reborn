@@ -295,13 +295,9 @@ def create_app(config: dict | None = None) -> Flask:
     def steam_enroll_continue():
         data = body()
         code = data.get("code")
-        if code is not None and (
-            not isinstance(code, str) or not code or len(code) > 20
-        ):
+        if code is not None and (not isinstance(code, str) or not code or len(code) > 20):
             raise ValueError("code must be text of at most 20 characters.")
-        return jsonify(
-            steam.continue_enrollment(string(data, "flow", 200), code)
-        )
+        return jsonify(steam.continue_enrollment(string(data, "flow", 200), code))
 
     @app.post("/api/steam/enroll/activate")
     def steam_enroll_activate():

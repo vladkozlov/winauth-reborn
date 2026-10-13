@@ -393,9 +393,7 @@ def test_steam_enrollment_api_delegates_challenges_and_activation(
         json={"flow": "enrollment-token", "code": "SMS123"},
     )
     assert response.json == {"added": True, "recovery_code": "R-SYNTHETIC"}
-    activate.assert_called_once_with(
-        "enrollment-token", "SMS123", app.extensions["vault"]
-    )
+    activate.assert_called_once_with("enrollment-token", "SMS123", app.extensions["vault"])
     assert client.delete(
         "/api/steam/enroll",
         headers=write_headers,

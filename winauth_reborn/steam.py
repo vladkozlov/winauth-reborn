@@ -458,31 +458,35 @@ class SteamService:
                 raise SteamError("Complete Steam login before entering the activation code.")
             shared_secret = flow["steam_data"]["shared_secret"]
             try:
-                secret = base64.b32encode(
-                    base64.b64decode(shared_secret, validate=True)
-                ).decode().rstrip("=")
+                secret = (
+                    base64.b32encode(base64.b64decode(shared_secret, validate=True))
+                    .decode()
+                    .rstrip("=")
+                )
                 server_time = int(flow["steam_data"]["server_time"])
             except (KeyError, TypeError, ValueError) as exc:
                 raise SteamError("Steam returned invalid authenticator timing data.") from exc
             self.offset = server_time - time.time()
-            uri = "otpauth://totp/" + quote(
-                f"Steam:{flow['account_name']}", safe=""
-            ) + "?" + urlencode(
-                {
-                    "secret": secret,
-                    "issuer": "Steam",
-                    "digits": "5",
-                    "period": "30",
-                    "deviceid": flow["device_id"],
-                    "data": json.dumps(flow["steam_data"], separators=(",", ":")),
-                }
+            uri = (
+                "otpauth://totp/"
+                + quote(f"Steam:{flow['account_name']}", safe="")
+                + "?"
+                + urlencode(
+                    {
+                        "secret": secret,
+                        "issuer": "Steam",
+                        "digits": "5",
+                        "period": "30",
+                        "deviceid": flow["device_id"],
+                        "data": json.dumps(flow["steam_data"], separators=(",", ":")),
+                    }
+                )
             )
             record = parse_export(uri)[0]
             record["steam_session"] = flow["steam_session"]
             for attempt in range(5):
                 timestamp_ms = (
-                    int((time.time() + self.offset) * 1000)
-                    + attempt * record["period"] * 1000
+                    int((time.time() + self.offset) * 1000) + attempt * record["period"] * 1000
                 )
                 result = self.two_factor_api(
                     flow["session"],
