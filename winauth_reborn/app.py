@@ -132,14 +132,27 @@ def create_app(config: dict | None = None) -> Flask:
                     "issuer": record["issuer"],
                     "kind": record["kind"],
                     "period": record["period"],
+                    "algorithm": record["algorithm"],
+                    "digits": record["digits"],
                     "counter": record["counter"],
                     "code": None if record["kind"] == "hotp" else generate_code(record, timestamp),
                     "remaining": record["period"] - timestamp % record["period"],
                     "steam_connected": bool(record.get("steam_session")),
                     "confirmations_available": bool(record["steam_data"].get("identity_secret")),
+                    "icon": record.get("icon", "initial"),
+                    "custom_icon": record.get("custom_icon", "")
+                    if record.get("icon") == "custom"
+                    else "",
+                    "color": record.get("color", "#b4ef82"),
+                    "pinned": record.get("pinned", False),
                 }
             )
         return jsonify(accounts=result, server_time=now)
+
+    @app.patch("/api/accounts/<account_id>")
+    def edit_account(account_id):
+        vault.edit(account_id, body())
+        return jsonify(ok=True)
 
     @app.post("/api/import")
     def import_file():

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from .authenticators import MAX_COUNTER, decode_secret, generate_code
+from .authenticators import MAX_COUNTER, decode_secret, edit_record, generate_code
 
 
 class AccountNotFound(KeyError):
@@ -112,6 +112,18 @@ class Vault:
             db.execute(
                 "UPDATE accounts SET payload = ? WHERE id = ?", (self.encode(record), account_id)
             )
+
+    def edit(self, account_id: str, changes: dict) -> dict:
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT payload FROM accounts WHERE id = ?", (account_id,)).fetchone()
+            if row is None:
+                raise AccountNotFound(account_id)
+            record = edit_record(self.decode(row[0]), changes)
+            db.execute(
+                "UPDATE accounts SET payload = ? WHERE id = ?", (self.encode(record), account_id)
+            )
+        return record
 
     def consume_hotp(self, account_id: str) -> str:
         with self.connection() as db:

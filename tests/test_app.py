@@ -206,6 +206,12 @@ def test_list_does_not_expose_secrets_sessions_or_export_uri(
         "remaining",
         "steam_connected",
         "confirmations_available",
+        "algorithm",
+        "digits",
+        "icon",
+        "custom_icon",
+        "color",
+        "pinned",
     }
     assert all(set(account) <= allowed for account in accounts)
     for forbidden in [

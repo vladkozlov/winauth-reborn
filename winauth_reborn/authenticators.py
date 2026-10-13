@@ -8,7 +8,9 @@ import json
 import re
 import struct
 import uuid
-from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
+
+from .appearance import validate_presentation
 
 STEAM_ALPHABET = "23456789BCDFGHJKMNPQRTVWXY"
 MAX_COUNTER = (1 << 64) - 1
@@ -95,6 +97,17 @@ def parse_export(text: str) -> list[dict]:
                     "device_id": params.get("deviceid", ""),
                 }
             )
+            presentation = {}
+            for key in ("icon", "color", "custom_icon"):
+                if f"x-reborn-{key}" in params:
+                    presentation[key] = params[f"x-reborn-{key}"]
+            if "x-reborn-pinned" in params:
+                if params["x-reborn-pinned"] not in {"true", "false"}:
+                    raise ValueError("Invalid pinned value.")
+                presentation["pinned"] = params["x-reborn-pinned"] == "true"
+            records[-1].update(validate_presentation(presentation))
+            if records[-1].get("icon") == "custom" and not records[-1].get("custom_icon"):
+                raise ValueError("Custom icon is missing its image.")
         except (ValueError, binascii.Error) as exc:
             raise ValueError(f"Line {number}: {exc}") from exc
     if not records:
@@ -127,7 +140,85 @@ def export_record(record: dict) -> str:
     params = dict(parse_qsl(uri.query, keep_blank_values=True))
     if record["kind"] == "hotp":
         params["counter"] = str(record["counter"])
+    for key in ("icon", "color", "custom_icon", "pinned"):
+        if key in record:
+            value = record[key]
+            params[f"x-reborn-{key}"] = str(value).lower() if key == "pinned" else value
     return urlunsplit(uri._replace(query=urlencode(params)))
+
+
+def edit_record(record: dict, changes: dict) -> dict:
+    allowed = {
+        "name",
+        "issuer",
+        "secret",
+        "algorithm",
+        "digits",
+        "period",
+        "icon",
+        "color",
+        "custom_icon",
+        "pinned",
+    }
+    if not changes or changes.keys() - allowed:
+        raise ValueError("Provide supported account fields to update.")
+    changes = validate_presentation(dict(changes))
+    for key in ("name", "issuer"):
+        if key in changes:
+            value = changes[key]
+            if (
+                not isinstance(value, str)
+                or len(value) > 200
+                or (key == "name" and not value.strip())
+            ):
+                raise ValueError(f"{key} must be text of at most 200 characters.")
+            changes[key] = value.strip()
+            if key == "issuer" and ":" in changes[key]:
+                raise ValueError("Issuer must not contain a colon.")
+    if "secret" in changes:
+        if not isinstance(changes["secret"], str):
+            raise ValueError("Secret must be Base32 text.")
+        decode_secret(changes["secret"])
+    for key in ("digits", "period"):
+        if key in changes and type(changes[key]) is not int:
+            raise ValueError(f"{key} must be an integer.")
+    if "algorithm" in changes and not isinstance(changes["algorithm"], str):
+        raise ValueError("Algorithm must be text.")
+    if record["kind"] == "steam":
+        if changes.get("issuer", record["issuer"]).lower() != "steam":
+            raise ValueError("A Steam authenticator's issuer must remain Steam.")
+        if changes.keys() & {"secret", "algorithm", "digits", "period"}:
+            raise ValueError(
+                "Steam key parameters are read-only. Import a full export to replace them."
+            )
+    elif changes.get("issuer", record["issuer"]).lower() == "steam":
+        raise ValueError("Changing an ordinary account into Steam is not supported.")
+    edited = {**record, **changes}
+    if edited.get("icon") == "custom" and not edited.get("custom_icon"):
+        raise ValueError("Upload an image before selecting the custom icon.")
+    uri = urlsplit(record["uri"])
+    params = dict(parse_qsl(uri.query, keep_blank_values=True))
+    params.update(
+        {
+            "secret": edited["secret"],
+            "issuer": edited["issuer"],
+            "algorithm": edited["algorithm"],
+            "digits": str(edited["digits"]),
+            "period": str(edited["period"]),
+        }
+    )
+    if record["kind"] == "hotp":
+        params["counter"] = str(record["counter"])
+    label = (quote(edited["issuer"], safe="") + ":" if edited["issuer"] else "") + quote(
+        edited["name"], safe=""
+    )
+    edited["uri"] = urlunsplit(uri._replace(path="/" + label, query=urlencode(params)))
+    validated = parse_export(edited["uri"])[0]
+    if validated["kind"] != record["kind"]:
+        raise ValueError("Account type cannot be changed.")
+    for key in ("secret", "algorithm", "digits", "period"):
+        edited[key] = validated[key]
+    return edited
 
 
 def validate_steam_id(value: str) -> str:
