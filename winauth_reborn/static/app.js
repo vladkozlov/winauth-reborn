@@ -149,7 +149,7 @@ function accountCard(account) {
   heading.append(name);
   const actions = element("div", "card-actions");
   const pin = element("button", `card-action pin-button ${account.pinned ? "selected" : ""}`);
-  pin.append(element("span", "glyph icon-star"));
+  pin.append(element("span", `glyph ${account.pinned ? "icon-star-filled" : "icon-star"}`));
   pin.setAttribute("aria-label", `${account.pinned ? "Unpin" : "Pin"} ${account.name}`);
   pin.setAttribute("aria-pressed", String(account.pinned));
   pin.title = account.pinned ? "Unpin card" : "Pin card";
@@ -257,7 +257,17 @@ function renderAccounts() {
     return key === "name" || key === "issuer"
       ? left[key].localeCompare(right[key], undefined, { sensitivity: "base" }) : 0;
   });
-  $("#accounts").replaceChildren(...filtered.map(accountCard));
+  const cards = [];
+  filtered.forEach((account, index) => {
+    if (index && filtered[index - 1].pinned && !account.pinned) {
+      const separator = element("div", "pin-separator");
+      separator.setAttribute("role", "separator");
+      separator.setAttribute("aria-label", "Other authenticators");
+      cards.push(separator);
+    }
+    cards.push(accountCard(account));
+  });
+  $("#accounts").replaceChildren(...cards);
   $("#empty-state").hidden = accounts.length !== 0;
   $("#no-results").hidden = accounts.length === 0 || filtered.length !== 0;
   $("#results-label").textContent = `${filtered.length} account${filtered.length === 1 ? "" : "s"}`;

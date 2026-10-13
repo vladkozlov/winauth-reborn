@@ -104,6 +104,8 @@ h2 { font-size: 23px; font-weight: 600; letter-spacing: -.5px; margin: 6px 0 10p
 .icon-globe { mask-image: url("icons/globe.svg"); }
 .icon-briefcase-business { mask-image: url("icons/briefcase-business.svg"); }
 .icon-star { mask-image: url("icons/star.svg"); }
+.icon-star-filled { mask-image: url("icons/star-filled.svg"); }
+.pin-separator { grid-column: 1 / -1; height: 12px; border-bottom: 1px solid var(--border); }
 .card-actions { display: flex; align-items: center; gap: 2px; }
 .card-action { display: grid; place-items: center; width: 24px; height: 27px; background: none; border: none; padding: 2px; color: var(--muted); border-radius: 4px; font-size: 18px; }
 .card-action .glyph { width: 16px; height: 16px; }
