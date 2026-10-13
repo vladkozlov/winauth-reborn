@@ -127,6 +127,21 @@ def test_password_hash_config_and_no_plaintext_config(vault_dir):
     assert "Strict-Transport-Security" not in response.headers
 
 
+def test_steam_proxy_is_loaded_from_environment(monkeypatch, vault_dir):
+    proxy_url = "socks5h://127.0.0.1:1080"
+    monkeypatch.setenv("WINAUTH_STEAM_PROXY", proxy_url)
+    app = create_app(
+        {
+            "TESTING": True,
+            "AUTH_USERNAME": "proxy-test",
+            "AUTH_PASSWORD": "test-only-proxy-password",
+            "DATA_DIR": str(vault_dir),
+            "HTTPS_ONLY": False,
+        }
+    )
+    assert app.extensions["steam"].proxy_url == proxy_url
+
+
 def test_startup_requires_password(vault_dir):
     with pytest.raises(RuntimeError, match="PASSWORD"):
         create_app({"DATA_DIR": str(vault_dir), "AUTH_PASSWORD": "", "AUTH_PASSWORD_HASH": ""})

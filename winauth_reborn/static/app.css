@@ -144,6 +144,8 @@ dialog::backdrop { background: #060a09bc; backdrop-filter: blur(5px); }
 .dialog-heading { display: flex; justify-content: space-between; gap: 20px; }
 .close-button { border: 0; background: transparent; font-size: 26px; color: var(--muted); align-self: start; padding: 0 4px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.settings-divider { border: 0; border-top: 1px solid var(--border); margin: 26px 0 20px; }
+#steam-proxy-form h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
 .dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 25px 15px; border: 1px dashed #5d7255; border-radius: 10px; background: #b4ef8205; margin: 22px 0; cursor: pointer; text-align: center; overflow-wrap: anywhere; }
 .dropzone.dragover { border-color: var(--accent); background: #b4ef8210; }
 .upload-symbol { font-size: 27px; color: var(--accent); }

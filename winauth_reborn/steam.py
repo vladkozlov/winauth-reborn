@@ -38,12 +38,49 @@ def device_id(steam_id: str) -> str:
 
 
 class SteamService:
-    def __init__(self):
+    def __init__(self, proxy_url: str | None = None):
+        self.proxy_url = self.validate_proxy_url(proxy_url) if proxy_url else None
         self.offset = 0.0
         self.synced_at: float | None = None
         self.pending: dict[str, dict] = {}
         self.pending_enrollments: dict[str, dict] = {}
         self.lock = threading.RLock()
+
+    @staticmethod
+    def validate_proxy_url(proxy_url: str) -> str:
+        if not isinstance(proxy_url, str) or len(proxy_url) > 2048:
+            raise ValueError("Steam proxy URL must be text of at most 2048 characters.")
+        try:
+            proxy = urlsplit(proxy_url)
+            port = proxy.port
+        except ValueError as exc:
+            raise ValueError("Steam proxy must be a valid socks5h://host:port URL.") from exc
+        if (
+            proxy.scheme != "socks5h"
+            or not proxy.hostname
+            or port is None
+            or port == 0
+            or proxy.path
+            or proxy.query
+            or proxy.fragment
+            or (proxy.username is None) != (proxy.password is None)
+            or (proxy.username is not None and (not proxy.username or proxy.password == ""))
+        ):
+            raise ValueError(
+                "Steam proxy must be a socks5h://host:port URL, optionally with "
+                "username:password credentials."
+            )
+        return proxy_url
+
+    def set_proxy(self, proxy_url: str | None):
+        proxy_url = self.validate_proxy_url(proxy_url) if proxy_url else None
+        with self.lock:
+            if self.proxy_url == proxy_url:
+                return
+            self.proxy_url = proxy_url
+            for flow in self.pending.values():
+                flow["session"].close()
+            self.pending.clear()
 
     @staticmethod
     def request(session: requests.Session, method: str, url: str, **kwargs) -> dict:
@@ -106,7 +143,7 @@ class SteamService:
             if self.synced_at is not None and time.monotonic() - self.synced_at < 300:
                 return
             before = time.time()
-            with requests.Session() as session:
+            with self.new_session() as session:
                 body = self.request(session, "POST", f"{API}/ITwoFactorService/QueryTime/v1/")
             response = body.get("response")
             if not isinstance(response, dict):
@@ -120,8 +157,7 @@ class SteamService:
                 raise SteamError("Steam returned an invalid server time.") from exc
             self.synced_at = time.monotonic()
 
-    @staticmethod
-    def new_session() -> requests.Session:
+    def new_session(self) -> requests.Session:
         session = requests.Session()
         session.headers.update(
             {
@@ -130,6 +166,8 @@ class SteamService:
                 "Referer": COMMUNITY + "/",
             }
         )
+        if self.proxy_url:
+            session.proxies.update({"http": self.proxy_url, "https": self.proxy_url})
         return session
 
     def begin_credentials(self, session: requests.Session, username: str, password: str) -> dict:
