@@ -57,3 +57,15 @@ def test_owner_preferences_api_auth_csrf_and_initial_theme(client, auth, write_h
     assert (
         client.patch("/api/settings", headers=write_headers, json={"theme": []}).status_code == 400
     )
+
+
+def test_additive_preferences_migration_preserves_existing_tokens(vault_dir, hotp_record):
+    vault = Vault(vault_dir)
+    vault.import_records([hotp_record])
+    vault.consume_hotp(hotp_record["id"])
+    with vault.connection() as db:
+        db.execute("DROP TABLE settings")
+    migrated = Vault(vault_dir)
+    assert migrated.settings() == DEFAULT_SETTINGS
+    assert migrated.get(hotp_record["id"])["counter"] == 1
+    assert migrated.consume_hotp(hotp_record["id"]) == "287082"
