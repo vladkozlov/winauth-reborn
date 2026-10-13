@@ -327,6 +327,7 @@ def test_atomic_imports_duplicate_preservation_edit_preferences_and_export(brows
 
 def test_recovery_and_explicit_server_only_confirmations(browser_edition):
     page = browser_edition
+    assert page.locator("#steam-proxy-form").count() == 0
     import_sample(page)
     page.get_by_role("button", name="Server-only confirmations", exact=True).click()
     expect(page.locator("#steam-error")).to_contain_text("server version")
