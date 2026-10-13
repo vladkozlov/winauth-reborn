@@ -5,17 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf }}">
   <meta name="color-scheme" content="dark light">
+  {% if browser_mode %}<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">{% endif %}
   <title>WinAuth Reborn</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   {% include 'pwa_head.html' %}
+  {% if browser_mode %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='browser.css') }}">
+  <script src="{{ url_for('static', filename='browser-tokens.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='browser-vault.js') }}" defer></script>
+  {% endif %}
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   <script src="{{ url_for('static', filename='editor.js') }}" defer></script>
   <script src="{{ url_for('static', filename='settings.js') }}" defer></script>
   <script src="{{ url_for('static', filename='recovery.js') }}" defer></script>
+  {% if browser_mode %}<script src="{{ url_for('static', filename='browser-gate.js') }}" defer></script>{% endif %}
 </head>
-<body>
+<body{% if browser_mode %} class="vault-locked"{% endif %}>
+  {% if browser_mode %}
+  <section id="browser-unlock" class="browser-unlock" aria-labelledby="browser-unlock-title">
+    <div class="brand"><span class="brand-mark">W</span><span>WinAuth<span class="brand-sub">BROWSER EDITION</span></span></div>
+    <h2 id="browser-unlock-title">Opening browser storage...</h2>
+    <p class="muted">No backend. Your authenticators stay encrypted on this browser, on this device.</p>
+    <form id="browser-unlock-form">
+      <label class="field">Vault password<input name="password" type="password" required maxlength="1000" autocomplete="current-password"></label>
+      <label class="field" id="browser-unlock-confirm" hidden>Confirm vault password<input name="confirm_password" type="password" maxlength="1000" autocomplete="new-password" disabled></label>
+      <div id="browser-unlock-error" class="form-error" role="alert"></div>
+      <button class="button primary login-submit" id="browser-unlock-submit" type="submit" disabled>Opening vault...</button>
+    </form>
+    <p class="banner">Choose a strong password of at least 12 characters. It cannot be reset or recovered. Keep a WinAuth .txt backup somewhere private: clearing browser data can remove this vault.</p>
+  </section>
+  {% endif %}
   <aside class="sidebar">
-    <a class="brand" href="/" aria-label="WinAuth Reborn home">
+    <a class="brand" href="{{ './' if browser_mode else '/' }}" aria-label="WinAuth Reborn home">
       <span class="brand-mark">W</span><span>WinAuth<span class="brand-sub">REBORN</span></span>
     </a>
     <div class="nav-caption">YOUR WORKSPACE</div>
@@ -23,7 +44,7 @@
     <button class="nav-item" id="steam-filter"><span aria-hidden="true">&#8644;</span> Steam accounts</button>
     <div class="sidebar-bottom">
       <div class="private-badge"><span class="status-dot"></span> Private by design</div>
-      <p>Secrets encrypted on disk.<br>No analytics. No cloud sync.</p>
+      <p>Secrets encrypted {{ 'in this browser' if browser_mode else 'on disk' }}.<br>No analytics. No cloud sync.</p>
       <button class="text-button" id="export-button">Export backup &rarr;</button>
     </div>
   </aside>
@@ -49,6 +70,7 @@
       <span class="muted" id="results-label">Loading your vault...</span>
     </div>
     <div id="connection-error" class="banner error" role="alert" hidden></div>
+    {% if browser_mode %}<p class="banner browser-notice">Browser edition: stored only on this browser/profile. Keep private backups; browser storage may be cleared or evicted. Codes use this device's clock. Steam confirmations require the server edition.</p>{% endif %}
     <section id="accounts" class="account-grid" aria-label="Authenticators" aria-busy="true"></section>
     <section id="empty-state" class="empty-state" hidden>
       <div class="empty-mark" aria-hidden="true">&#10022;</div>
@@ -72,7 +94,7 @@
         <input id="import-file" type="file" accept=".txt,text/plain" class="visually-hidden">
       </label>
       <label class="field">Or paste otpauth URIs<textarea id="import-text" rows="4" placeholder="otpauth://totp/Service:account?secret=..." spellcheck="false" autocomplete="off"></textarea></label>
-      <div class="banner">This file contains your private authenticator secrets. Import only on your own trusted server over HTTPS.</div>
+      <div class="banner">This file contains your private authenticator secrets. Import only {{ 'in your trusted browser' if browser_mode else 'on your own trusted server' }} over HTTPS or localhost.</div>
       <div class="form-error" id="import-error" role="alert"></div>
       <div class="dialog-actions"><button type="button" class="button secondary" data-close>Cancel</button><button class="button primary" type="submit">Import accounts</button></div>
     </form>
@@ -149,7 +171,7 @@
 
   <dialog id="settings-dialog" aria-labelledby="settings-title">
     <div class="dialog-heading"><div><span class="eyebrow">YOUR PREFERENCES</span><h2 id="settings-title">Settings</h2></div><button class="close-button" data-close aria-label="Close settings">&times;</button></div>
-    <p class="muted">Saved in your encrypted vault and shared across your devices. This is a single-owner workspace.</p>
+    <p class="muted">Saved in your encrypted vault {{ 'on this browser only' if browser_mode else 'and shared across your devices' }}. This is a single-owner workspace.</p>
     <form id="settings-form">
       <div class="field-grid">
         <label class="field">Theme<select name="theme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">Follow system</option></select></label>
@@ -159,7 +181,7 @@
       <label class="check-field"><input name="hide_codes" type="checkbox"> Hide codes by default when opening the app</label>
       <label class="field">Hide codes when idle<select name="auto_hide_seconds"><option value="0">Never</option><option value="30">After 30 seconds</option><option value="60">After 1 minute</option><option value="300">After 5 minutes</option></select></label>
       <p class="banner">Keyboard shortcuts: <kbd>/</kbd> search, <kbd>H</kbd> hide/show codes, <kbd>,</kbd> settings. Shortcuts do not trigger while typing or inside a dialog.</p>
-      <p class="muted">Basic Auth credentials remain in your server's .env configuration. Recovery details clear after 60 seconds or when the page is hidden.</p>
+      <p class="muted">{{ 'Your browser vault password is never saved. Lock or close the app to clear the unlock key.' if browser_mode else "Basic Auth credentials remain in your server's .env configuration." }} Recovery details clear after 60 seconds or when the page is hidden.</p>
       <div id="settings-error" class="form-error" role="alert"></div>
       <div class="dialog-actions"><button class="button secondary" type="button" id="reset-settings">Restore defaults</button><button class="button primary" type="submit">Save settings</button></div>
     </form>

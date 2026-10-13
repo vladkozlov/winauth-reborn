@@ -32,7 +32,7 @@ function element(tag, className, text) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
+  const response = window.browserVault ? await window.browserVault.request(path, options) : await fetch(path, {
     credentials: "same-origin",
     cache: "no-store",
     ...options,
@@ -230,7 +230,7 @@ function accountCard(account) {
   if (account.kind === "steam") {
     const links = element("div", "card-links");
     const steamButton = element("button", "steam-button",
-      account.confirmations_available ? "Confirmations \u2192" : "Missing confirmation data");
+      window.browserVault ? "Server-only confirmations" : account.confirmations_available ? "Confirmations \u2192" : "Missing confirmation data");
     steamButton.onclick = () => openSteam(accounts.find((item) => item.id === account.id) || account);
     links.append(steamButton);
     footer.append(links);
@@ -342,7 +342,7 @@ async function refreshAccounts(forceRender) {
     loadedAt = performance.now();
     applySettings(data.settings);
     $("#connection-error").hidden = true;
-    $("#refresh-status").textContent = "Vault connected";
+    $("#refresh-status").textContent = window.browserVault ? "Browser-local vault" : "Vault connected";
     $("#accounts").setAttribute("aria-busy", "false");
     if (changed || !$("#accounts").children.length) renderAccounts();
     else updateCards();
@@ -453,7 +453,7 @@ function goToLogin() {
   revealedCodes.clear();
   accounts = [];
   $("#accounts").replaceChildren();
-  window.location.replace("/login");
+  window.location.replace(window.browserVault ? new URL("./", window.location.href) : "/login");
 }
 $("#lock-button").onclick = async () => {
   const button = $("#lock-button");
@@ -483,7 +483,11 @@ async function openSteam(account) {
   $("#steam-code-form").hidden = true;
   setSteamConnected(account.steam_connected);
   $("#steam-dialog").showModal();
-  if (!account.confirmations_available) {
+  if (window.browserVault) {
+    $("#steam-error").textContent = "Steam trade confirmations require the server version: Steam does not allow direct browser requests. Steam Guard codes and imported recovery details work offline.";
+    $("#steam-connect").hidden = true;
+    $("#steam-connected").hidden = true;
+  } else if (!account.confirmations_available) {
     $("#steam-error").textContent = "This export lacks identity_secret. Export from WinAuth with full Steam data, not compatibility mode. Steam Guard codes still work.";
     $("#steam-connect").hidden = true;
   } else if (account.steam_connected) {
@@ -630,6 +634,7 @@ setInterval(() => {
   if (!document.hidden) loadAccounts();
 }, 1000);
 document.addEventListener("DOMContentLoaded", () => {
+  if (window.browserVault) return;
   initialized = true;
   loadAccounts(true);
 });

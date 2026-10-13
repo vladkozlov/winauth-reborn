@@ -1,0 +1,7 @@
+.vault-locked > main, .vault-locked > .sidebar { display: none; }
+.browser-unlock { max-width: 510px; margin: 8vh auto 24px; padding: 30px; border: 1px solid var(--border); border-radius: 18px; background: var(--panel); }
+.browser-unlock .brand { margin-bottom: 28px; }
+.browser-unlock .field { margin-top: 20px; }
+.browser-unlock .login-submit { width: 100%; margin: 20px 0; }
+.browser-notice { margin-bottom: 22px; }
+@media (max-width: 600px) { .browser-unlock { margin: 24px 16px; padding: 24px; } }
