@@ -10,6 +10,7 @@ from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from .appearance import ICONS
 from .authenticators import export_record, generate_code, parse_export
 from .steam import SteamError, SteamService, cookie_session
 from .storage import AccountNotFound, Vault
@@ -117,7 +118,15 @@ def create_app(config: dict | None = None) -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html", csrf=csrf)
+        return render_template("index.html", csrf=csrf, settings=vault.settings(), icons=ICONS)
+
+    @app.get("/api/settings")
+    def settings():
+        return jsonify(settings=vault.settings())
+
+    @app.patch("/api/settings")
+    def update_settings():
+        return jsonify(settings=vault.update_settings(body()))
 
     @app.get("/api/accounts")
     def accounts():
@@ -147,7 +156,7 @@ def create_app(config: dict | None = None) -> Flask:
                     "pinned": record.get("pinned", False),
                 }
             )
-        return jsonify(accounts=result, server_time=now)
+        return jsonify(accounts=result, server_time=now, settings=vault.settings())
 
     @app.patch("/api/accounts/<account_id>")
     def edit_account(account_id):

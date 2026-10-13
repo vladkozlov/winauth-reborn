@@ -9,6 +9,7 @@ from pathlib import Path
 from cryptography.fernet import Fernet, InvalidToken
 
 from .authenticators import MAX_COUNTER, decode_secret, edit_record, generate_code
+from .preferences import DEFAULT_SETTINGS, validate_settings
 
 
 class AccountNotFound(KeyError):
@@ -33,6 +34,10 @@ class Vault:
         with self.connection() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS accounts (id TEXT PRIMARY KEY, payload BLOB NOT NULL)"
+            )
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id = 1), "
+                "payload BLOB NOT NULL)"
             )
         os.chmod(self.path, 0o600)
 
@@ -124,6 +129,23 @@ class Vault:
                 "UPDATE accounts SET payload = ? WHERE id = ?", (self.encode(record), account_id)
             )
         return record
+
+    def settings(self) -> dict:
+        with self.connection() as db:
+            row = db.execute("SELECT payload FROM settings WHERE id = 1").fetchone()
+        return {**DEFAULT_SETTINGS, **(self.decode(row[0]) if row else {})}
+
+    def update_settings(self, changes: dict) -> dict:
+        changes = validate_settings(changes)
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT payload FROM settings WHERE id = 1").fetchone()
+            settings = {**DEFAULT_SETTINGS, **(self.decode(row[0]) if row else {}), **changes}
+            db.execute(
+                "INSERT INTO settings VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
+                (self.encode(settings),),
+            )
+        return settings
 
     def consume_hotp(self, account_id: str) -> str:
         with self.connection() as db:
