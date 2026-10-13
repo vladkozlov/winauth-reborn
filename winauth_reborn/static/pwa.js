@@ -56,6 +56,24 @@
       };
       worker.postMessage("CLEAN_OLD_CACHES", [channel.port2]);
     });
+    const activateUpdate = (worker) => new Promise((resolve, reject) => {
+      const channel = new MessageChannel();
+      const timeout = setTimeout(() => {
+        channel.port1.close();
+        reject(new Error("Timed out while activating the app update."));
+      }, 5000);
+      channel.port1.onmessage = () => {
+        clearTimeout(timeout);
+        channel.port1.close();
+        resolve();
+      };
+      channel.port1.onmessageerror = () => {
+        clearTimeout(timeout);
+        channel.port1.close();
+        reject(new Error("Could not confirm app update activation."));
+      };
+      worker.postMessage("ACTIVATE_UPDATE", [channel.port2]);
+    });
     const watchUpdate = () => {
       const worker = registration.waiting;
       update.hidden = !worker;
@@ -99,13 +117,12 @@
         navigator.serviceWorker.addEventListener("controllerchange", reloadIfControlled);
         if (worker.state === "activated") reloadIfControlled();
         else if (navigator.serviceWorker.controller !== worker) {
-          try { worker.postMessage("ACTIVATE_UPDATE"); }
-          catch (error) {
+          activateUpdate(worker).catch((error) => {
             update.dataset.accepted = "false";
             update.disabled = false;
             status(`Could not activate the update: ${error.message}`);
             watchUpdate();
-          }
+          });
         }
       };
     };
