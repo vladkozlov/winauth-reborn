@@ -1,5 +1,6 @@
 import pytest
 
+from winauth_reborn.app import create_app
 from winauth_reborn.preferences import DEFAULT_SETTINGS, validate_settings
 from winauth_reborn.storage import Vault
 
@@ -57,6 +58,80 @@ def test_owner_preferences_api_auth_csrf_and_initial_theme(client, auth, write_h
     assert (
         client.patch("/api/settings", headers=write_headers, json={"theme": []}).status_code == 400
     )
+
+
+def test_protected_steam_proxy_settings_are_encrypted_and_applied(client, auth, write_headers):
+    assert client.get("/api/steam/proxy").status_code == 401
+    initial = client.get("/api/steam/proxy", headers=auth)
+    assert initial.json["proxy"] == {"mode": "environment", "active": False}
+    assert client.put("/api/steam/proxy", headers=auth, json={"mode": "direct"}).status_code == 403
+
+    proxy_url = "socks5h://steam-user:secret%40phrase@127.0.0.1:1080"
+    response = client.put(
+        "/api/steam/proxy",
+        headers=write_headers,
+        json={"mode": "custom", "url": proxy_url},
+    )
+    assert response.status_code == 200
+    assert response.json["proxy"] == {"mode": "custom", "active": True}
+    assert proxy_url not in response.get_data(as_text=True)
+    assert client.application.extensions["steam"].proxy_url == proxy_url
+
+    vault = client.application.extensions["vault"]
+    assert vault.steam_proxy_override() == {"mode": "custom", "url": proxy_url}
+    assert proxy_url.encode() not in vault.path.read_bytes()
+    assert b"secret%40phrase" not in vault.path.read_bytes()
+    assert b"secret%40phrase" not in client.get("/api/settings", headers=auth).data
+    assert Vault(vault.path.parent).steam_proxy_override() == {
+        "mode": "custom",
+        "url": proxy_url,
+    }
+    restarted_app = create_app(
+        {
+            "TESTING": True,
+            "AUTH_USERNAME": "proxy-test",
+            "AUTH_PASSWORD": "test-only-proxy-password",
+            "DATA_DIR": str(vault.path.parent),
+            "HTTPS_ONLY": False,
+        }
+    )
+    assert restarted_app.extensions["steam"].proxy_url == proxy_url
+
+    assert client.put(
+        "/api/steam/proxy",
+        headers=write_headers,
+        json={"mode": "custom", "url": ""},
+    ).json["proxy"] == {"mode": "custom", "active": True}
+    assert client.put(
+        "/api/steam/proxy",
+        headers=write_headers,
+        json={"mode": "direct"},
+    ).json["proxy"] == {"mode": "direct", "active": False}
+    assert client.application.extensions["steam"].proxy_url is None
+    server_default = "socks5h://127.0.0.2:1080"
+    client.application.config["STEAM_PROXY"] = server_default
+    assert client.put(
+        "/api/steam/proxy",
+        headers=write_headers,
+        json={"mode": "environment"},
+    ).json["proxy"] == {"mode": "environment", "active": True}
+    assert vault.steam_proxy_override() is None
+    assert client.application.extensions["steam"].proxy_url == server_default
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"mode": "custom"},
+        {"mode": "custom", "url": "https://proxy.example:1080"},
+        {"mode": "unexpected"},
+        {"mode": []},
+        {"mode": "direct", "extra": True},
+        {"mode": "direct", "url": []},
+    ],
+)
+def test_invalid_steam_proxy_settings_are_rejected(client, write_headers, data):
+    assert client.put("/api/steam/proxy", headers=write_headers, json=data).status_code == 400
 
 
 def test_additive_preferences_migration_preserves_existing_tokens(vault_dir, hotp_record):

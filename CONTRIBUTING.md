@@ -21,6 +21,8 @@ Keep changes focused. Add deterministic tests for parser compatibility, cryptogr
 storage transactions, and API behavior. Steam tests must mock network responses:
 CI must never approve a real trade or connect to an account. Browser tests exercise
 the actual UI against an ephemeral local server and a temporary encrypted vault.
+The browser QR decoder is vendored from the pinned npm dependency; refresh it
+with `npm ci && npm run vendor:qr`.
 
 The GitHub workflow runs lint, syntax checks, backend/browser tests, and package
 builds, and separately builds the container. CI uses Python 3.11 and 3.13.

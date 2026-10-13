@@ -14,6 +14,7 @@
   <script src="{{ url_for('static', filename='browser-tokens.js') }}" defer></script>
   <script src="{{ url_for('static', filename='browser-vault.js') }}" defer></script>
   {% endif %}
+  <script src="{{ url_for('static', filename='qr-decoder.js') }}" defer></script>
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   <script src="{{ url_for('static', filename='editor.js') }}" defer></script>
   <script src="{{ url_for('static', filename='settings.js') }}" defer></script>
@@ -56,6 +57,7 @@
         <button class="button secondary icon-only" id="lock-button" aria-label="Lock vault" title="Lock vault and sign out">&#9099;</button>
         <button class="button secondary icon-only" id="settings-button" aria-label="Settings" title="Settings">&#9881;</button>
         <button class="button secondary" id="privacy-button" aria-pressed="false">Hide codes</button>
+        <button class="button secondary" id="add-totp-button"><span aria-hidden="true">+</span> Add TOTP</button>
         <button class="button primary" id="import-button"><span aria-hidden="true">+</span> Import authenticators</button>
       </div>
     </header>
@@ -76,6 +78,7 @@
       <div class="empty-mark" aria-hidden="true">&#10022;</div>
       <h2>Your next chapter starts here.</h2>
       <p>Bring your existing WinAuth authenticators with you.<br>Import your original .txt export to get started.</p>
+      <button class="button secondary" id="empty-add-totp">Add a TOTP manually</button>
       <button class="button primary" id="empty-import">Import WinAuth .txt</button>
       <span class="muted">TOTP &middot; HOTP &middot; Steam Guard &middot; Battle.net</span>
     </section>
@@ -83,6 +86,36 @@
     <footer>WinAuth Reborn <span>&middot;</span> Self-hosted. Yours to keep. <button class="text-button mobile-only" id="mobile-export-button">Export backup</button><span id="refresh-status"></span></footer>
   </main>
   {% include 'pwa_controls.html' %}
+
+  <dialog id="add-totp-dialog" aria-labelledby="add-totp-title">
+    <div class="dialog-heading"><div><span class="eyebrow">ADD AUTHENTICATOR</span><h2 id="add-totp-title">Add a TOTP</h2></div><button class="close-button" data-close aria-label="Close add TOTP">&times;</button></div>
+    <p class="muted">Enter the shared key provided by the service when you set up an authenticator. This adds codes to WinAuth Reborn; it does not register or change an authenticator with that service.</p>
+    <form id="add-totp-form">
+      <section class="qr-import" aria-label="Import from QR code">
+        <div class="qr-actions">
+          <button class="button secondary small" id="qr-camera-button" type="button">Scan with camera</button>
+          <button class="button secondary small" id="qr-image-button" type="button">Choose QR image</button>
+          <input id="qr-image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" class="visually-hidden">
+        </div>
+        <video id="qr-camera" class="qr-camera" playsinline muted hidden aria-label="Camera preview for QR scanning"></video>
+        <div id="qr-error" class="form-error" role="status" aria-live="polite"></div>
+        <p class="muted">QR decoding happens on this device. Camera access requires HTTPS or localhost.</p>
+      </section>
+      <div class="field-grid">
+        <label class="field">Account name<input name="name" required maxlength="200" autocomplete="off" placeholder="alice@example.com"></label>
+        <label class="field">Service / issuer<input name="issuer" maxlength="200" autocomplete="off" placeholder="Example"></label>
+      </div>
+      <label class="field">Shared key (Base32)<input name="secret" type="password" required maxlength="256" autocomplete="off" spellcheck="false" placeholder="Enter the key from the service"><span class="muted">Spaces are ignored. Keep this key private.</span></label>
+      <div class="field-grid">
+        <label class="field">Algorithm<select name="algorithm"><option>SHA1</option><option>SHA256</option><option>SHA512</option></select></label>
+        <label class="field">Digits<select name="digits"><option>6</option><option>8</option><option>5</option><option>7</option><option>9</option><option>10</option></select></label>
+        <label class="field">Period (seconds)<input name="period" type="number" min="1" max="86400" value="30" required></label>
+      </div>
+      <div class="banner">For safety, confirm the generated code with the service before relying on it. Keep a secure backup of your shared key.</div>
+      <div id="add-totp-error" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close>Cancel</button><button class="button primary" type="submit">Add TOTP</button></div>
+    </form>
+  </dialog>
 
   <dialog id="import-dialog" aria-labelledby="import-title">
     <div class="dialog-heading"><div><span class="eyebrow">BRING YOUR ACCOUNTS</span><h2 id="import-title">Import authenticators</h2></div><button class="close-button" data-close aria-label="Close import">&times;</button></div>
@@ -185,6 +218,25 @@
       <div id="settings-error" class="form-error" role="alert"></div>
       <div class="dialog-actions"><button class="button secondary" type="button" id="reset-settings">Restore defaults</button><button class="button primary" type="submit">Save settings</button></div>
     </form>
+    {% if not browser_mode %}
+    <form id="steam-proxy-form">
+      <hr class="settings-divider">
+      <h3>Steam network</h3>
+      <p class="muted">Choose how the server connects to Steam. Changes apply to subsequent Steam requests immediately.</p>
+      <label class="field">Proxy mode<select name="mode">
+        <option value="environment">Use server default</option>
+        <option value="direct">Connect directly</option>
+        <option value="custom">Custom SOCKS5h proxy</option>
+      </select></label>
+      <div id="steam-proxy-url-field" hidden>
+        <label class="field">SOCKS5h URL<input name="url" type="password" maxlength="2048" autocomplete="new-password" spellcheck="false" placeholder="socks5h://username:password@host:1080"><span class="muted">Authentication is optional. Use percent-encoding for special characters in credentials.</span></label>
+        <p class="banner">The proxy URL is encrypted in the server vault and never returned to the browser. SOCKS5 credentials are not encrypted by the proxy protocol itself: use a private encrypted tunnel such as WireGuard, and do not expose the proxy port publicly.</p>
+      </div>
+      <p id="steam-proxy-status" class="muted" role="status"></p>
+      <div id="steam-proxy-error" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button class="button primary" type="submit">Apply proxy</button></div>
+    </form>
+    {% endif %}
   </dialog>
 
   <dialog id="recovery-dialog" class="wide-dialog" aria-labelledby="recovery-title">

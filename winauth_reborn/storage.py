@@ -39,6 +39,10 @@ class Vault:
                 "CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK(id = 1), "
                 "payload BLOB NOT NULL)"
             )
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS private_settings (name TEXT PRIMARY KEY, "
+                "payload BLOB NOT NULL)"
+            )
         os.chmod(self.path, 0o600)
 
     @contextmanager
@@ -146,6 +150,24 @@ class Vault:
                 (self.encode(settings),),
             )
         return settings
+
+    def steam_proxy_override(self) -> dict | None:
+        with self.connection() as db:
+            row = db.execute(
+                "SELECT payload FROM private_settings WHERE name = 'steam_proxy'"
+            ).fetchone()
+        return self.decode(row[0]) if row else None
+
+    def update_steam_proxy_override(self, override: dict | None):
+        with self.connection() as db:
+            if override is None:
+                db.execute("DELETE FROM private_settings WHERE name = 'steam_proxy'")
+            else:
+                db.execute(
+                    "INSERT INTO private_settings VALUES ('steam_proxy', ?) "
+                    "ON CONFLICT(name) DO UPDATE SET payload=excluded.payload",
+                    (self.encode(override),),
+                )
 
     def consume_hotp(self, account_id: str) -> str:
         with self.connection() as db:

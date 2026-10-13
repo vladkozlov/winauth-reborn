@@ -1,8 +1,10 @@
 """Real-browser checks with synthetic authenticators and a mocked Steam service."""
 
+import base64
 import io
 import json
 import threading
+from pathlib import Path
 from urllib.parse import quote, urlsplit
 
 import pytest
@@ -154,6 +156,80 @@ def test_import_copy_search_privacy_hotp_and_restart(browser_page, live_app):
     expect(bob.locator(".time-row")).to_contain_text("Counter: 1")
 
 
+def test_add_totp_manually(browser_page, live_app):
+    page = browser_page
+    page.locator("#empty-add-totp").click()
+    form = page.locator("#add-totp-form")
+    form.locator('[name="name"]').fill("alice+test@example.com")
+    form.locator('[name="issuer"]').fill("Example & Co")
+    form.locator('[name="secret"]').fill("JBSWY3DPEHPK3PXP")
+    form.locator('[name="algorithm"]').select_option("SHA256")
+    form.locator('[name="digits"]').select_option("8")
+    form.locator('[name="period"]').fill("45")
+    form.get_by_role("button", name="Add TOTP", exact=True).click()
+
+    expect(page.locator(".account-card")).to_have_count(1)
+    account = live_app[0].extensions["vault"].list()[0]
+    assert account["name"] == "alice+test@example.com"
+    assert account["issuer"] == "Example & Co"
+    assert (account["algorithm"], account["digits"], account["period"]) == ("SHA256", 8, 45)
+    assert account["secret"] == "JBSWY3DPEHPK3PXP"
+    expect(page.locator("#add-totp-dialog")).not_to_be_visible()
+
+
+def test_add_totp_from_qr_image(browser_page, live_app):
+    page = browser_page
+    page.locator("#add-totp-button").click()
+    page.locator("#qr-image-file").set_input_files(
+        str(Path(__file__).parent / "fixtures" / "totp-qr.png")
+    )
+    expect(page.locator("#qr-error")).to_contain_text("QR decoded on this device")
+    form = page.locator("#add-totp-form")
+    expect(form.locator('[name="name"]')).to_have_value("qr-user")
+    expect(form.locator('[name="issuer"]')).to_have_value("Example")
+    expect(form.locator('[name="secret"]')).to_have_value("JBSWY3DPEHPK3PXP")
+    expect(form.locator('[name="algorithm"]')).to_have_value("SHA256")
+    expect(form.locator('[name="digits"]')).to_have_value("8")
+    expect(form.locator('[name="period"]')).to_have_value("45")
+    form.get_by_role("button", name="Add TOTP", exact=True).click()
+
+    expect(page.locator(".account-card")).to_have_count(1)
+    record = live_app[0].extensions["vault"].list()[0]
+    assert record["secret"] == "JBSWY3DPEHPK3PXP"
+    assert record["algorithm"] == "SHA256" and record["digits"] == 8
+    assert record["period"] == 45
+    assert "x-fixture=kept" in record["uri"]
+
+
+def test_scan_totp_qr_with_camera(browser_page, live_app):
+    page = browser_page
+    page.locator("#add-totp-button").click()
+    image = (Path(__file__).parent / "fixtures" / "totp-qr.png").read_bytes()
+    page.evaluate(
+        """async (source) => {
+          const image = new Image();
+          image.src = source;
+          await image.decode();
+          const canvas = document.createElement("canvas");
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+          canvas.getContext("2d").drawImage(image, 0, 0);
+          const stream = canvas.captureStream(10);
+          Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+            configurable: true, value: async () => stream
+          });
+        }""",
+        f"data:image/png;base64,{base64.b64encode(image).decode()}",
+    )
+    page.locator("#qr-camera-button").click()
+    expect(page.locator("#qr-error")).to_contain_text("QR decoded on this device", timeout=10000)
+    expect(page.locator("#add-totp-form [name='name']")).to_have_value("qr-user")
+    expect(page.locator("#qr-camera")).to_be_hidden()
+    page.locator("#add-totp-form").get_by_role("button", name="Add TOTP", exact=True).click()
+    expect(page.locator(".account-card")).to_have_count(1)
+    assert live_app[0].extensions["vault"].list()[0]["secret"] == "JBSWY3DPEHPK3PXP"
+
+
 def test_steam_login_review_approve_and_disconnect(browser_page, live_app):
     page = browser_page
     import_sample(page)
@@ -298,6 +374,34 @@ def test_preferences_themes_compact_privacy_sort_and_shortcuts(browser_page):
     assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(16, 18, 20)"
     page.emulate_media(color_scheme="light")
     assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(245, 247, 245)"
+
+
+def test_settings_apply_protected_steam_proxy_to_next_requests(browser_page, live_app):
+    page = browser_page
+    page.locator("#settings-button").click()
+    expect(page.locator("#steam-proxy-status")).to_contain_text("connects directly")
+    page.locator('#steam-proxy-form [name="mode"]').select_option("custom")
+    proxy_url = "socks5h://steam-user:secret%40phrase@127.0.0.1:1080"
+    page.locator('#steam-proxy-form [name="url"]').fill(proxy_url)
+    page.get_by_role("button", name="Apply proxy", exact=True).click()
+    expect(page.locator("#steam-proxy-status")).to_contain_text("saved securely")
+    steam = live_app[0].extensions["steam"]
+    assert steam.proxy_url == proxy_url
+    session = steam.new_session()
+    try:
+        assert session.proxies["https"] == proxy_url
+    finally:
+        session.close()
+    assert page.locator('#steam-proxy-form [name="url"]').input_value() == ""
+    response_body = page.evaluate("fetch('/api/steam/proxy').then(response => response.text())")
+    assert "secret%40phrase" not in response_body
+
+    page.locator('#steam-proxy-form [name="mode"]').select_option("direct")
+    page.get_by_role("button", name="Apply proxy", exact=True).click()
+    expect(page.locator("#steam-proxy-status")).to_have_text(
+        "Steam connects directly from the server."
+    )
+    assert live_app[0].extensions["steam"].proxy_url is None
 
 
 def test_recovery_is_revealed_only_after_confirmation_and_cleared(browser_page):

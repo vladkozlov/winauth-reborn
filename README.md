@@ -100,6 +100,14 @@ In WinAuth, choose **Export** and save an unencrypted `.txt` export. For Steam,
 include the full authenticator data rather than a compatibility-only URI.
 Use **Import authenticators** to select/drop the file, or paste its contents.
 
+- **Add TOTP** to enter a service's shared Base32 key, account name, issuer, and
+  code parameters manually. This creates a code generator in the vault; it does
+  not enroll or update an authenticator at the service. Verify a generated code
+  with the service before relying on it. You can also scan a QR with your camera
+  or choose a QR image; decoding happens locally in the browser. Camera access
+  requires HTTPS or localhost. Remote image URLs are not fetched; save the image
+  locally and upload it instead. To add a TOTP from a QR code's `otpauth://`
+  URI, paste or import the URI.
 - Each non-empty, non-comment line is an `otpauth://totp/...` or `otpauth://hotp/...` URI.
   UTF-8 BOMs, WinAuth label encoding, `issuer`, `digits`, `algorithm`, `period`,
   and `counter` are supported.
@@ -124,7 +132,7 @@ Use **Import authenticators** to select/drop the file, or paste its contents.
 
 Encrypted ZIP/PGP exports and WinAuth XML configuration files are **not** plain-text
 exports. Decrypt or export to plaintext locally before importing; this app does not
-enroll new hardware authenticators, recover lost secrets, or migrate device-bound
+enroll authenticators with services, recover lost secrets, or migrate device-bound
 WinAuth encryption. It copies **one-time authentication codes**, not account passwords.
 
 ## Customize cards and preferences
@@ -300,6 +308,9 @@ python -m winauth_reborn.build_browser --output dist/browser
 
 The resulting folder can be served by any HTTPS static host; it does not need
 Python to run. The builder refuses to overwrite non-empty output directories.
+
+The QR decoder is bundled locally. To refresh its vendored file and license,
+run `npm ci` followed by `npm run vendor:qr`.
 
 ```sh
 python -m pip install -e '.[dev]'
