@@ -15,6 +15,23 @@ copy live codes, and manage Steam confirmations in one place.
 
 **Status:** initial alpha. MIT-licensed; no affiliation with Valve or WinAuth.
 
+## Choose your edition
+
+| | Server edition | Browser edition |
+| --- | --- | --- |
+| Artifact | Multi-platform Docker image on GHCR | Downloadable static PWA |
+| Vault | Encrypted on your server; shared across authenticated devices | Encrypted in IndexedDB on one browser/profile |
+| Unlock | Basic-backed login, optional remembered PIN | Local vault password; no backend |
+| Offline codes | No; the server must be reachable | Yes, after the app shell is installed |
+| Steam Guard and recovery | Yes | Yes |
+| Steam trade confirmations | Yes, subject to Steam's endpoint limitations | No; Steam blocks direct browser requests |
+| Install on phone/PC | Yes | Yes |
+
+Pushing `main` publishes both artifacts through GitHub Actions; `v*` tags also
+attach the browser ZIP to a GitHub Release. **Nothing is deployed automatically.**
+See **[artifact publishing and manual deployment](docs/DEPLOYMENT.md)** for image
+tags, public GHCR visibility, static hosting, HTTPS, updates, and PWA installation.
+
 ## Run locally
 
 Requires Python 3.11 or newer.
@@ -211,12 +228,15 @@ trade was used to test this project.
 This is a **single-owner vault**, not a multi-user password manager. All clients
 using the configured Basic Auth credentials can access the same accounts. Basic
 Auth or a verified browser session protects the vault, APIs, and application
-scripts; writes additionally require the app's CSRF header. Only the login page
-and its CSS/JavaScript assets are public; they contain no vault data. Login
+scripts; writes additionally require the app's CSRF header. Only the login page,
+its assets, and the PWA manifest/worker/icons/offline shell are public; they
+contain no vault data. Login
 requires explicit Basic credentials, a custom JSON request, and same-origin
 validation when an Origin header is present. Codes are not persisted in browser
 storage; optional remembered credentials are encrypted as described above.
-There is no service worker.
+The service worker caches only the public installation/login/offline shell,
+never private HTML or API responses. The separate browser edition caches static
+resources and keeps its encrypted local vault in IndexedDB.
 
 Use **HTTPS**, keep the application port private, and terminate TLS at a reverse
 proxy. Basic Auth is only encoded, not encrypted, over plain HTTP. For example,
@@ -271,6 +291,15 @@ the vault. It is not a substitute for host security. Plaintext import/export fil
 browser clipboard contents, and screenshots remain sensitive.
 
 ## Development
+
+Build the browser-only artifact into a new/empty output directory:
+
+```sh
+python -m winauth_reborn.build_browser --output dist/browser
+```
+
+The resulting folder can be served by any HTTPS static host; it does not need
+Python to run. The builder refuses to overwrite non-empty output directories.
 
 ```sh
 python -m pip install -e '.[dev]'

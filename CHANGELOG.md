@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0
+
+- Added a separate backend-free browser artifact reusing the modern UI, with
+  an encrypted IndexedDB vault, local password unlock, Web Crypto OTP generation,
+  compatible imports/exports, and cross-tab atomic HOTP counter advancement.
+- Added installable PWAs, original app icons, scoped service workers, explicit
+  app updates, and offline browser-mode use. The server worker caches only
+  public resources and never private vault responses.
+- Added GHCR publishing for AMD64/ARM64 images, downloadable browser artifacts
+  on main pushes, and permanent browser ZIP assets on version-tagged releases.
+  Publishing workflows do not deploy to a server or GitHub Pages.
+- Added a pull-only Compose file and manual deployment/HTTPS/update instructions
+  for both artifacts.
+- Added browser regressions for cross-language crypto compatibility, encrypted
+  persistence, offline reloads, multi-tab counters, local edits, and cache safety.
+
 ## 0.3.0
 
 - Added a friendly Basic Auth-backed login page, signed browser sessions, and

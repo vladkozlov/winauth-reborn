@@ -34,6 +34,22 @@ fixtures and a minimal reproduction instead.
 - Lock signs out that browser, not other devices or API clients. It suppresses
   cached Basic credentials only while its signed lock cookie remains valid.
   Forgetting a saved login deletes the local envelope, not server credentials.
+- The server PWA worker caches only public login/installation/offline assets.
+  Private HTML, API responses, codes, credentials, and Steam sessions are not
+  cached. Installing the server edition does not provide offline vault access.
+- The separate browser edition encrypts accounts and preferences in IndexedDB
+  using AES-GCM-256 and PBKDF2-SHA256 with 600,000 iterations. The strong local
+  vault password and derived key are never persisted; the key stays in memory
+  until that tab is locked or closed. This is distinct from remembered server
+  PIN credentials. Locking one browser tab does not revoke other unlocked tabs.
+- A stolen browser vault permits offline password guessing. A compromised
+  browser, trusted origin, or static hosting supply chain can capture the
+  password and decrypted secrets when the vault is unlocked. Use a dedicated
+  trusted origin and keep application files read-only to the web server.
+- Browser storage is not a backup: clearing site data, eviction, private mode,
+  or losing the password can lose accounts. Maintain private WinAuth exports.
+  No browser secrets are synced or sent to the static host. Browser code
+  generation trusts the device clock, and Steam confirmations are unavailable.
 - Code hiding and idle privacy are visual controls, not authentication locks.
   Steam recovery details require an explicit authenticated, CSRF-protected reveal
   and clear from the UI when closed, hidden, or timed out; copied clipboard values
