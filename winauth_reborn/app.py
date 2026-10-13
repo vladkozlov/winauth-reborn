@@ -28,6 +28,7 @@ def create_app(config: dict | None = None) -> Flask:
         AUTH_PASSWORD=os.environ.get("WINAUTH_PASSWORD", ""),
         AUTH_PASSWORD_HASH=os.environ.get("WINAUTH_PASSWORD_HASH", ""),
         DATA_DIR=os.environ.get("WINAUTH_DATA_DIR", "./data"),
+        STEAM_PROXY=os.environ.get("WINAUTH_STEAM_PROXY", ""),
         HTTPS_ONLY=os.environ.get("WINAUTH_HTTPS_ONLY", "false").lower() == "true",
         MAX_CONTENT_LENGTH=2 * 1024 * 1024,
         SESSION_COOKIE_NAME="winauth_session",
@@ -44,7 +45,7 @@ def create_app(config: dict | None = None) -> Flask:
         password_hash = generate_password_hash(app.config["AUTH_PASSWORD"])
     app.config.pop("AUTH_PASSWORD", None)
     vault = Vault(Path(app.config["DATA_DIR"]).resolve())
-    steam = SteamService()
+    steam = SteamService(app.config["STEAM_PROXY"] or None)
     app.extensions.update(vault=vault, steam=steam)
     csrf = secrets.token_urlsafe(32)
     app.secret_key = secrets.token_bytes(32)

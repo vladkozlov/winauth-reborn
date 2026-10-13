@@ -36,7 +36,25 @@ def device_id(steam_id: str) -> str:
 
 
 class SteamService:
-    def __init__(self):
+    def __init__(self, proxy_url: str | None = None):
+        if proxy_url:
+            try:
+                proxy = urlsplit(proxy_url)
+                port = proxy.port
+            except ValueError as exc:
+                raise ValueError(
+                    "WINAUTH_STEAM_PROXY must be a valid socks5h://host:port URL."
+                ) from exc
+            if (
+                proxy.scheme != "socks5h"
+                or not proxy.hostname
+                or port is None
+                or proxy.path
+                or proxy.query
+                or proxy.fragment
+            ):
+                raise ValueError("WINAUTH_STEAM_PROXY must be a socks5h://host:port URL.")
+        self.proxy_url = proxy_url
         self.offset = 0.0
         self.synced_at: float | None = None
         self.pending: dict[str, dict] = {}
@@ -92,7 +110,7 @@ class SteamService:
             if self.synced_at is not None and time.monotonic() - self.synced_at < 300:
                 return
             before = time.time()
-            with requests.Session() as session:
+            with self.new_session() as session:
                 body = self.request(session, "POST", f"{API}/ITwoFactorService/QueryTime/v1/")
             response = body.get("response")
             if not isinstance(response, dict):
@@ -106,8 +124,7 @@ class SteamService:
                 raise SteamError("Steam returned an invalid server time.") from exc
             self.synced_at = time.monotonic()
 
-    @staticmethod
-    def new_session() -> requests.Session:
+    def new_session(self) -> requests.Session:
         session = requests.Session()
         session.headers.update(
             {
@@ -116,6 +133,8 @@ class SteamService:
                 "Referer": COMMUNITY + "/",
             }
         )
+        if self.proxy_url:
+            session.proxies.update({"http": self.proxy_url, "https": self.proxy_url})
         return session
 
     def login(self, record: dict, username: str, password: str) -> dict:

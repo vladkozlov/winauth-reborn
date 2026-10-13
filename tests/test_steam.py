@@ -513,6 +513,34 @@ def test_confirmation_missing_session_and_identity(steam_record, clock):
         service.confirmation_params(steam_record, STEAM_ID, "conf")
 
 
+def test_steam_sessions_use_configured_socks_proxy():
+    service = SteamService("socks5h://127.0.0.1:1080")
+    session = service.new_session()
+    try:
+        assert session.proxies == {
+            "http": "socks5h://127.0.0.1:1080",
+            "https": "socks5h://127.0.0.1:1080",
+        }
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize(
+    "proxy_url",
+    [
+        "http://127.0.0.1:1080",
+        "socks5://127.0.0.1:1080",
+        "socks5h://127.0.0.1",
+        "socks5h:///1080",
+        "socks5h://127.0.0.1:bad",
+        "socks5h://127.0.0.1:1080/path",
+    ],
+)
+def test_steam_proxy_rejects_unsupported_or_malformed_urls(proxy_url):
+    with pytest.raises(ValueError, match="WINAUTH_STEAM_PROXY"):
+        SteamService(proxy_url)
+
+
 @pytest.mark.parametrize(
     "response,message",
     [
