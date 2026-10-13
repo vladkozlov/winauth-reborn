@@ -381,7 +381,43 @@ def test_service_worker_update_preserves_vault_and_other_apps_caches(
         os.utime(worker_path, (original_stat.st_atime, original_stat.st_mtime + 2))
         page.evaluate("navigator.serviceWorker.ready.then(registration => registration.update())")
         expect(page.locator("#pwa-update")).to_be_visible()
-        page.once("dialog", lambda dialog: dialog.accept())
+        before_click = page.evaluate(
+            """async () => {
+              const registration = await navigator.serviceWorker.getRegistration();
+              const worker = registration.waiting;
+              if (!worker) return {waiting: false};
+              return new Promise(resolve => {
+                const channel = new MessageChannel();
+                channel.port1.onmessage = event => resolve({
+                  waiting: true,
+                  state: worker.state,
+                  cache: event.data.cache
+                });
+                setTimeout(() => resolve({
+                  waiting: true,
+                  state: worker.state,
+                  cacheTimeout: true
+                }), 1500);
+                worker.postMessage("GET_CACHE_INFO", [channel.port2]);
+              });
+            }"""
+        )
+        page.evaluate(
+            """() => window.addEventListener("beforeunload", () => {
+              sessionStorage.setItem("pwa-update-beforeunload", JSON.stringify({
+                status: document.querySelector("#pwa-status").textContent,
+                accepted: document.querySelector("#pwa-update").dataset.accepted,
+                disabled: document.querySelector("#pwa-update").disabled
+              }));
+            }, {once: true})"""
+        )
+        dialogs = []
+
+        def accept_update(dialog):
+            dialogs.append(dialog.message)
+            dialog.accept()
+
+        page.once("dialog", accept_update)
         page.locator("#pwa-update").click()
         expect(page.locator("#browser-unlock")).to_be_visible()
         unlock(page)
@@ -404,6 +440,12 @@ def test_service_worker_update_preserves_vault_and_other_apps_caches(
                 active: await inspect(registration.active),
                 waiting: await inspect(registration.waiting),
                 installing: await inspect(registration.installing),
+                status: document.querySelector("#pwa-status").textContent,
+                updateButton: {
+                  disabled: document.querySelector("#pwa-update").disabled,
+                  accepted: document.querySelector("#pwa-update").dataset.accepted
+                },
+                beforeUnload: sessionStorage.getItem("pwa-update-beforeunload"),
                 states: {
                   controller: navigator.serviceWorker.controller?.state,
                   active: registration.active?.state,
@@ -413,6 +455,8 @@ def test_service_worker_update_preserves_vault_and_other_apps_caches(
               };
             }"""
         )
+        cache_state["dialogs"] = dialogs
+        cache_state["beforeClick"] = before_click
         assert cache_state["controller"]["cache"].endswith("-update"), (
             f"Page is controlled by the wrong worker: {cache_state}"
         )

@@ -65,6 +65,7 @@
       channel.port1.onmessage = () => {
         clearTimeout(timeout);
         channel.port1.close();
+        status("Update activation requested. Waiting for the new worker to take control...");
         resolve();
       };
       channel.port1.onmessageerror = () => {
@@ -75,10 +76,18 @@
       worker.postMessage("ACTIVATE_UPDATE", [channel.port2]);
     });
     const watchUpdate = () => {
-      const worker = registration.waiting;
-      update.hidden = !worker;
-      if (!worker) return;
+      const waitingWorker = registration.waiting;
+      update.hidden = !waitingWorker;
+      if (!waitingWorker) {
+        update.onclick = null;
+        return;
+      }
       update.onclick = () => {
+        const worker = registration.waiting;
+        if (!worker) {
+          watchUpdate();
+          return;
+        }
         if (!window.confirm("Update the app now? Open changes will be discarded and a browser vault will lock.")) return;
         if (worker.state === "redundant") {
           status("This update is no longer available. Reload to check for a newer version.");
@@ -87,6 +96,7 @@
         }
         update.dataset.accepted = "true";
         update.disabled = true;
+        status("Activating app update...");
         let completingUpdate = false;
         const completeUpdate = async () => {
           if (completingUpdate || worker.state !== "activated" ||

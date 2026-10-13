@@ -21,9 +21,10 @@ self.addEventListener("activate", (event) => {
 });
 self.addEventListener("message", (event) => {
   if (event.data === "ACTIVATE_UPDATE") {
-    event.waitUntil(self.skipWaiting().then(() => event.ports[0]?.postMessage("activating")));
-  }
-  else if (event.data === "CLEAN_OLD_CACHES") {
+    event.waitUntil(
+      self.skipWaiting().then(() => event.ports[0]?.postMessage("activation-requested"))
+    );
+  } else if (event.data === "CLEAN_OLD_CACHES") {
     event.waitUntil(deleteOldCaches().then(() => event.ports[0]?.postMessage("cleaned")));
   } else if (event.data === "GET_CACHE_INFO") {
     event.waitUntil(caches.keys().then((names) =>
