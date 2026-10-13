@@ -170,6 +170,7 @@ code { font-family: ui-monospace, monospace; color: var(--text); }
 .confirmation { padding: 18px; border: 1px solid var(--border); border-radius: 10px; margin: 14px 0; background: var(--bg); }
 .confirmation h3 { font-size: 14px; margin: 0 0 8px; }
 .confirmation p { font-size: 13px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; margin: 5px 0; }
+#steam-recovery-code { display: block; margin-top: 8px; padding: 12px; user-select: all; }
 .confirmation .dialog-actions { margin-top: 15px; }
 .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #e8f6de; color: #213319; border-radius: 10px; padding: 12px 23px; font-weight: 550; box-shadow: 0 5px 30px #0005; z-index: 100; max-width: calc(100vw - 30px); }
 .toast.error { background: #ffdbdb; color: #6a2727; }

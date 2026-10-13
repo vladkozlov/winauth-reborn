@@ -1,4 +1,5 @@
 import base64
+from unittest.mock import Mock
 
 import pytest
 import requests
@@ -239,6 +240,80 @@ def test_email_challenge_preserves_flow_until_code(
     assert session.calls[2][2]["data"]["code_type"] == "2"
     assert session.closed
     assert service.pending == {}
+
+
+def test_enrollment_login_sms_activation_and_vault_record(
+    monkeypatch,
+    rsa_key,
+    clock,
+):
+    shared_secret = base64.b64encode(b"12345678901234567890").decode()
+    final = final_steps()
+    final[0] = (
+        "POST",
+        "PollAuthSessionStatus/v1/",
+        {
+            "response": {
+                "refresh_token": "test-refresh-token",
+                "access_token": "test-access-token",
+            }
+        },
+    )
+    session = ScriptedSession(
+        [
+            ("GET", "GetPasswordRSAPublicKey/v1/", rsa_response(rsa_key)),
+            ("POST", "BeginAuthSessionViaCredentials/v1/", auth_response(2)),
+            ("POST", "UpdateAuthSessionWithSteamGuardCode/v1/", {"response": {}}),
+            *final,
+            (
+                "POST",
+                "AddAuthenticator/v1/",
+                {
+                    "response": {
+                        "shared_secret": shared_secret,
+                        "identity_secret": IDENTITY,
+                        "serial_number": "serial-fixture",
+                        "revocation_code": "R-SYNTHETIC",
+                        "server_time": "1700000000",
+                        "account_name": "fixture-user",
+                        "phone_number_hint": "***1234",
+                    }
+                },
+            ),
+            (
+                "POST",
+                "FinalizeAddAuthenticator/v1/",
+                {"response": {"success": True}},
+            ),
+        ]
+    )
+    service = setup_login(monkeypatch, session)
+    challenge = service.start_enrollment("fixture-user", "fixture-password")
+    assert challenge["needs_code"] is True
+    enrollment = service.continue_enrollment(challenge["flow"], "EMAIL1")
+    assert enrollment["needs_activation"] is True
+    assert enrollment["phone_hint"] == "***1234"
+
+    vault = Mock()
+    vault.import_records.return_value = (1, 0)
+    result = service.activate_enrollment(challenge["flow"], "SMS123", vault)
+    assert result == {
+        "added": True,
+        "account_name": "fixture-user",
+        "recovery_code": "R-SYNTHETIC",
+    }
+    record = vault.import_records.call_args.args[0][0]
+    assert record["kind"] == "steam"
+    assert record["digits"] == 5
+    assert record["steam_data"]["identity_secret"] == IDENTITY
+    assert record["steam_data"]["revocation_code"] == "R-SYNTHETIC"
+    assert record["steam_session"]["steam_id"] == STEAM_ID
+    assert "access_token" not in record
+    assert session.calls[-1][2]["data"]["activation_code"] == "SMS123"
+    assert len(session.calls[-1][2]["data"]["authenticator_code"]) == 5
+    assert session.calls[-1][2]["data"]["authenticator_time"] == "1700000000000"
+    assert session.closed is True
+    assert service.pending_enrollments == {}
 
 
 def test_expired_email_flow_closes_session(monkeypatch, steam_record, rsa_key, clock):

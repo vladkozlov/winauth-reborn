@@ -3,17 +3,19 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import logging
 import secrets
 import struct
 import threading
 import time
-from urllib.parse import quote, urlsplit
+import uuid
+from urllib.parse import quote, urlencode, urlsplit
 
 import requests
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-from .authenticators import generate_code, validate_steam_id
+from .authenticators import generate_code, parse_export, validate_steam_id
 
 API = "https://api.steampowered.com"
 COMMUNITY = "https://steamcommunity.com"
@@ -41,6 +43,7 @@ class SteamService:
         self.offset = 0.0
         self.synced_at: float | None = None
         self.pending: dict[str, dict] = {}
+        self.pending_enrollments: dict[str, dict] = {}
         self.lock = threading.RLock()
 
     @staticmethod
@@ -124,6 +127,17 @@ class SteamService:
             raise SteamError("Steam's authentication response is missing required data.")
         return body["response"]
 
+    def two_factor_api(self, session: requests.Session, endpoint: str, data: dict) -> dict:
+        body = self.request(
+            session,
+            "POST",
+            f"{API}/ITwoFactorService/{endpoint}/v1/",
+            data=data,
+        )
+        if not isinstance(body.get("response"), dict):
+            raise SteamError("Steam's authenticator response is missing required data.")
+        return body["response"]
+
     def sync_time(self):
         with self.lock:
             if self.synced_at is not None and time.monotonic() - self.synced_at < 300:
@@ -156,36 +170,38 @@ class SteamService:
             session.proxies.update({"http": self.proxy_url, "https": self.proxy_url})
         return session
 
+    def begin_credentials(self, session: requests.Session, username: str, password: str) -> dict:
+        session.cookies.set("sessionid", secrets.token_hex(12), domain="steamcommunity.com")
+        key = self.api(session, "GetPasswordRSAPublicKey", {"account_name": username}, "GET")
+        try:
+            public_key = rsa.RSAPublicNumbers(
+                int(key["publickey_exp"], 16), int(key["publickey_mod"], 16)
+            ).public_key()
+            encrypted = public_key.encrypt(password.encode(), padding.PKCS1v15())
+            timestamp = key["timestamp"]
+        except (KeyError, ValueError) as exc:
+            raise SteamError("Steam returned an invalid password encryption key.") from exc
+        begin = self.api(
+            session,
+            "BeginAuthSessionViaCredentials",
+            {
+                "account_name": username,
+                "encrypted_password": base64.b64encode(encrypted).decode(),
+                "encryption_timestamp": timestamp,
+                "persistence": "1",
+                "platform_type": "2",
+                "website_id": "Community",
+            },
+        )
+        if not all(begin.get(key) for key in ("client_id", "request_id", "steamid")):
+            raise SteamError("Steam did not start login. Check credentials or try on Steam first.")
+        return begin
+
     def login(self, record: dict, username: str, password: str) -> dict:
         self.sync_time()
         session = self.new_session()
         try:
-            session.cookies.set("sessionid", secrets.token_hex(12), domain="steamcommunity.com")
-            key = self.api(session, "GetPasswordRSAPublicKey", {"account_name": username}, "GET")
-            try:
-                public_key = rsa.RSAPublicNumbers(
-                    int(key["publickey_exp"], 16), int(key["publickey_mod"], 16)
-                ).public_key()
-                encrypted = public_key.encrypt(password.encode(), padding.PKCS1v15())
-                timestamp = key["timestamp"]
-            except (KeyError, ValueError) as exc:
-                raise SteamError("Steam returned an invalid password encryption key.") from exc
-            begin = self.api(
-                session,
-                "BeginAuthSessionViaCredentials",
-                {
-                    "account_name": username,
-                    "encrypted_password": base64.b64encode(encrypted).decode(),
-                    "encryption_timestamp": timestamp,
-                    "persistence": "1",
-                    "platform_type": "2",
-                    "website_id": "Community",
-                },
-            )
-            if not all(begin.get(key) for key in ("client_id", "request_id", "steamid")):
-                raise SteamError(
-                    "Steam did not start login. Check credentials or try on Steam first."
-                )
+            begin = self.begin_credentials(session, username, password)
             imported_id = record["steam_data"].get("steamid") or record["steam_data"].get(
                 "steam_id"
             )
@@ -238,6 +254,10 @@ class SteamService:
             if flow["expires"] < time.monotonic():
                 flow["session"].close()
                 del self.pending[account_id]
+        for token, flow in list(self.pending_enrollments.items()):
+            if flow["expires"] < time.monotonic():
+                flow["session"].close()
+                del self.pending_enrollments[token]
 
     def login_code(self, account_id: str, token: str, code: str) -> dict:
         with self.lock:
@@ -288,6 +308,7 @@ class SteamService:
             raise SteamError(
                 "Steam login is still awaiting approval. Try again after approving it."
             )
+        flow["access_token"] = status.get("access_token")
         finalized = self.request(
             session,
             "POST",
@@ -324,6 +345,216 @@ class SteamService:
         if not secure:
             raise SteamError("Steam login did not issue a Community session. Please retry.")
         return {"steam_id": steam_id, "steam_login_secure": secure}
+
+    def start_enrollment(self, username: str, password: str) -> dict:
+        self.sync_time()
+        session = self.new_session()
+        flow = {"session": session, "expires": time.monotonic() + 600}
+        token = secrets.token_urlsafe(32)
+        try:
+            begin = self.begin_credentials(session, username, password)
+            flow.update(begin=begin, username=username, state="login")
+            try:
+                methods = {
+                    int(item["confirmation_type"])
+                    for item in begin.get("allowed_confirmations", [])
+                }
+            except (KeyError, TypeError, ValueError) as exc:
+                raise SteamError("Steam returned an invalid login challenge.") from exc
+            with self.lock:
+                self.clear_expired()
+                self.pending_enrollments[token] = flow
+            if 3 in methods:
+                flow["code_type"] = 3
+                return {
+                    "flow": token,
+                    "needs_code": True,
+                    "message": "Enter the Steam Guard code from your authenticator.",
+                }
+            if 2 in methods:
+                flow["code_type"] = 2
+                return {
+                    "flow": token,
+                    "needs_code": True,
+                    "message": "Enter the code Steam emailed you.",
+                }
+            if 1 in methods:
+                return {
+                    "flow": token,
+                    "needs_approval": True,
+                    "message": "Approve this login in the official Steam app, then continue.",
+                }
+            return self._complete_enrollment_login(token, flow)
+        except Exception:
+            with self.lock:
+                saved = self.pending_enrollments.pop(token, None)
+            if saved is None:
+                session.close()
+            else:
+                saved["session"].close()
+            raise
+
+    def _complete_enrollment_login(self, token: str, flow: dict) -> dict:
+        login = flow.get("login_result")
+        if login is None:
+            login = self.finish_login(flow)
+            flow["login_result"] = login
+        access_token = flow.get("access_token")
+        if not isinstance(access_token, str) or not access_token:
+            raise SteamError("Steam did not return an authenticator enrollment token.")
+        steam_id = login["steam_id"]
+        device = flow.setdefault("device_id", f"android:{uuid.uuid4()}")
+        flow["state"] = "setup"
+        try:
+            added = self.two_factor_api(
+                flow["session"],
+                "AddAuthenticator",
+                {
+                    "access_token": access_token,
+                    "steamid": steam_id,
+                    "authenticator_type": "1",
+                    "device_identifier": device,
+                    "sms_phone_id": "1",
+                },
+            )
+        except SteamError:
+            flow["state"] = "setup_failed"
+            raise
+        if added.get("status") == 84:
+            flow["state"] = "setup_failed"
+            raise SteamError(
+                "Steam could not send an activation SMS. Add a SMS-capable phone number "
+                "to your Steam account and try again."
+            )
+        required = ("shared_secret", "identity_secret", "serial_number", "revocation_code")
+        if not all(isinstance(added.get(key), str) and added[key] for key in required):
+            flow["state"] = "setup_failed"
+            raise SteamError("Steam did not return the required authenticator setup data.")
+        try:
+            base64.b64decode(added["shared_secret"], validate=True)
+            base64.b64decode(added["identity_secret"], validate=True)
+        except (ValueError, TypeError) as exc:
+            flow["state"] = "setup_failed"
+            raise SteamError("Steam returned invalid authenticator setup data.") from exc
+        flow.update(
+            state="activation",
+            access_token=access_token,
+            steam_id=steam_id,
+            steam_session=login,
+            device_id=device,
+            steam_data={
+                **{
+                    key: value
+                    for key, value in added.items()
+                    if key not in {"access_token", "refresh_token"}
+                },
+                "steamid": steam_id,
+                "steamguard_scheme": "2",
+            },
+            account_name=str(added.get("account_name") or flow["username"]),
+        )
+        return {
+            "flow": token,
+            "needs_activation": True,
+            "account_name": flow["account_name"],
+            "phone_hint": str(added.get("phone_number_hint") or ""),
+            "message": "Steam sent an activation code to the phone number on this account.",
+        }
+
+    def continue_enrollment(self, token: str, code: str | None = None) -> dict:
+        with self.lock:
+            self.clear_expired()
+            flow = self.pending_enrollments.get(token)
+            if flow is None:
+                raise SteamError("Steam enrollment expired. Start again.")
+            if flow["state"] != "login":
+                if flow["state"] == "setup_failed":
+                    raise SteamError(
+                        "Steam authenticator setup was interrupted. Close this dialog and start again."
+                    )
+                raise SteamError("Steam login is already complete. Enter the activation code.")
+            if flow.get("code_type"):
+                if not code:
+                    raise SteamError("Enter the Steam login code to continue.")
+                self.submit_code(flow, code, flow["code_type"])
+                flow.pop("code_type")
+            return self._complete_enrollment_login(token, flow)
+
+    def cancel_enrollment(self, token: str):
+        with self.lock:
+            flow = self.pending_enrollments.pop(token, None)
+        if flow:
+            flow["session"].close()
+
+    def activate_enrollment(self, token: str, activation_code: str, vault) -> dict:
+        with self.lock:
+            self.clear_expired()
+            flow = self.pending_enrollments.get(token)
+            if flow is None:
+                raise SteamError("Steam enrollment expired. Start again.")
+            if flow["state"] != "activation":
+                raise SteamError("Complete Steam login before entering the activation code.")
+            shared_secret = flow["steam_data"]["shared_secret"]
+            try:
+                secret = (
+                    base64.b32encode(base64.b64decode(shared_secret, validate=True))
+                    .decode()
+                    .rstrip("=")
+                )
+                server_time = int(flow["steam_data"]["server_time"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise SteamError("Steam returned invalid authenticator timing data.") from exc
+            self.offset = server_time - time.time()
+            uri = (
+                "otpauth://totp/"
+                + quote(f"Steam:{flow['account_name']}", safe="")
+                + "?"
+                + urlencode(
+                    {
+                        "secret": secret,
+                        "issuer": "Steam",
+                        "digits": "5",
+                        "period": "30",
+                        "deviceid": flow["device_id"],
+                        "data": json.dumps(flow["steam_data"], separators=(",", ":")),
+                    }
+                )
+            )
+            record = parse_export(uri)[0]
+            record["steam_session"] = flow["steam_session"]
+            for attempt in range(5):
+                timestamp_ms = (
+                    int((time.time() + self.offset) * 1000) + attempt * record["period"] * 1000
+                )
+                result = self.two_factor_api(
+                    flow["session"],
+                    "FinalizeAddAuthenticator",
+                    {
+                        "access_token": flow["access_token"],
+                        "steamid": flow["steam_id"],
+                        "activation_code": activation_code,
+                        "authenticator_code": generate_code(record, timestamp_ms / 1000),
+                        "authenticator_time": str(timestamp_ms),
+                    },
+                )
+                if result.get("status") == 89:
+                    raise SteamError("Steam rejected the activation code. Check it and try again.")
+                if result.get("success") is True:
+                    break
+                if not result.get("want_more"):
+                    raise SteamError(
+                        "Steam could not activate this authenticator. Check the code and try again."
+                    )
+            else:
+                raise SteamError("Steam could not activate this authenticator. Please retry.")
+            added, _ = vault.import_records([record])
+            self.pending_enrollments.pop(token, None)
+            flow["session"].close()
+            return {
+                "added": bool(added),
+                "account_name": record["name"],
+                "recovery_code": flow["steam_data"]["revocation_code"],
+            }
 
     def confirmation_params(self, record: dict, steam_id: str, tag: str) -> dict:
         identity = record["steam_data"].get("identity_secret")

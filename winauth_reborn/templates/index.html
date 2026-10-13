@@ -58,6 +58,7 @@
         <button class="button secondary icon-only" id="settings-button" aria-label="Settings" title="Settings">&#9881;</button>
         <button class="button secondary" id="privacy-button" aria-pressed="false">Hide codes</button>
         <button class="button secondary" id="add-totp-button"><span aria-hidden="true">+</span> Add TOTP</button>
+        {% if not browser_mode %}<button class="button secondary" id="add-steam-button"><span aria-hidden="true">+</span> Add Steam account</button>{% endif %}
         <button class="button primary" id="import-button"><span aria-hidden="true">+</span> Import authenticators</button>
       </div>
     </header>
@@ -79,6 +80,7 @@
       <h2>Your next chapter starts here.</h2>
       <p>Bring your existing WinAuth authenticators with you.<br>Import your original .txt export to get started.</p>
       <button class="button secondary" id="empty-add-totp">Add a TOTP manually</button>
+      {% if not browser_mode %}<button class="button secondary" id="empty-add-steam">Add a Steam account</button>{% endif %}
       <button class="button primary" id="empty-import">Import WinAuth .txt</button>
       <span class="muted">TOTP &middot; HOTP &middot; Steam Guard &middot; Battle.net</span>
     </section>
@@ -132,6 +134,41 @@
       <div class="dialog-actions"><button type="button" class="button secondary" data-close>Cancel</button><button class="button primary" type="submit">Import accounts</button></div>
     </form>
   </dialog>
+
+  {% if not browser_mode %}
+  <dialog id="steam-enroll-dialog" class="wide-dialog" aria-labelledby="steam-enroll-title">
+    <div class="dialog-heading"><div><span class="eyebrow">STEAM GUARD</span><h2 id="steam-enroll-title">Add a Steam account</h2></div><button class="close-button" data-close aria-label="Close Steam enrollment">&times;</button></div>
+    <p class="muted">Sign in to Steam to register a mobile authenticator. Steam credentials are used only for this login and are never saved. Use this only on a trusted server, over HTTPS when connecting remotely. Your Steam account must have an SMS-capable phone number.</p>
+    <div id="steam-enroll-error" class="form-error" role="alert"></div>
+    <section id="steam-enroll-login">
+      <form id="steam-enroll-login-form">
+        <label class="field">Steam account name<input name="username" autocomplete="username" required maxlength="200"></label>
+        <label class="field">Steam password<input name="password" type="password" autocomplete="current-password" required maxlength="1000"></label>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close>Cancel</button><button class="button primary" type="submit">Sign in to Steam</button></div>
+      </form>
+    </section>
+    <section id="steam-enroll-challenge" hidden>
+      <p id="steam-enroll-challenge-message" class="banner"></p>
+      <form id="steam-enroll-challenge-form">
+        <label id="steam-enroll-code-field" class="field">Steam login code<input name="code" autocomplete="one-time-code" maxlength="20"></label>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close>Cancel</button><button class="button primary" type="submit">Continue login</button></div>
+      </form>
+    </section>
+    <section id="steam-enroll-activation" hidden>
+      <p id="steam-enroll-phone" class="banner"></p>
+      <form id="steam-enroll-activation-form">
+        <label class="field">SMS activation code<input name="code" autocomplete="one-time-code" required maxlength="20"></label>
+        <p class="muted">Steam will enable the authenticator after this code is verified. Keep the recovery code shown at the end somewhere safe.</p>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close>Cancel</button><button class="button primary" type="submit">Activate Steam Guard</button></div>
+      </form>
+    </section>
+    <section id="steam-enroll-success" hidden>
+      <p class="banner">Steam Guard is active and the account has been added to your encrypted vault. Save this recovery code somewhere safe; it can remove the authenticator.</p>
+      <label class="field">Steam recovery code<code id="steam-recovery-code" class="recovery-value"></code></label>
+      <div class="dialog-actions"><button class="button primary" type="button" data-close>Done</button></div>
+    </section>
+  </dialog>
+  {% endif %}
 
   <dialog id="steam-dialog" class="wide-dialog" aria-labelledby="steam-title">
     <div class="dialog-heading"><div><span class="eyebrow">STEAM GUARD</span><h2 id="steam-title">Steam confirmations</h2></div><button class="close-button" data-close aria-label="Close Steam">&times;</button></div>

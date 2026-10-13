@@ -346,6 +346,40 @@ def create_app(config: dict | None = None) -> Flask:
         added, skipped = vault.import_records(records)
         return jsonify(added=added, skipped=skipped)
 
+    @app.post("/api/steam/enroll")
+    def steam_enroll():
+        data = body()
+        return jsonify(
+            steam.start_enrollment(
+                string(data, "username", 200),
+                string(data, "password", 1000),
+            )
+        )
+
+    @app.post("/api/steam/enroll/continue")
+    def steam_enroll_continue():
+        data = body()
+        code = data.get("code")
+        if code is not None and (not isinstance(code, str) or not code or len(code) > 20):
+            raise ValueError("code must be text of at most 20 characters.")
+        return jsonify(steam.continue_enrollment(string(data, "flow", 200), code))
+
+    @app.post("/api/steam/enroll/activate")
+    def steam_enroll_activate():
+        data = body()
+        return jsonify(
+            steam.activate_enrollment(
+                string(data, "flow", 200),
+                string(data, "code", 20),
+                vault,
+            )
+        )
+
+    @app.delete("/api/steam/enroll")
+    def steam_enroll_cancel():
+        steam.cancel_enrollment(string(body(), "flow", 200))
+        return jsonify(ok=True)
+
     @app.post("/api/export")
     def export_file():
         text = "\n".join(export_record(record) for record in vault.list()) + "\n"

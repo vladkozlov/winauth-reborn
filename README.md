@@ -108,6 +108,13 @@ Use **Import authenticators** to select/drop the file, or paste its contents.
   requires HTTPS or localhost. Remote image URLs are not fetched; save the image
   locally and upload it instead. To add a TOTP from a QR code's `otpauth://`
   URI, paste or import the URI.
+- **Add Steam account** in the server edition to sign in to Steam and register a
+  Steam Guard mobile authenticator. Complete any Steam login challenge and the
+  activation SMS sent to the phone attached to the Steam account. The password
+  is never saved; use a trusted server and HTTPS for remote access. Authenticator
+  data and the Steam session are encrypted in the vault. Save the recovery code
+  shown after activation. This enrollment is not
+  available in the backend-free browser edition.
 - Each non-empty, non-comment line is an `otpauth://totp/...` or `otpauth://hotp/...` URI.
   UTF-8 BOMs, WinAuth label encoding, `issuer`, `digits`, `algorithm`, `period`,
   and `counter` are supported.
@@ -131,9 +138,10 @@ Use **Import authenticators** to select/drop the file, or paste its contents.
   current HOTP counters but excluding saved Steam web sessions. Treat it as a secret.
 
 Encrypted ZIP/PGP exports and WinAuth XML configuration files are **not** plain-text
-exports. Decrypt or export to plaintext locally before importing; this app does not
-enroll authenticators with services, recover lost secrets, or migrate device-bound
-WinAuth encryption. It copies **one-time authentication codes**, not account passwords.
+exports. Decrypt or export to plaintext locally before importing; except for Steam
+Guard enrollment in the server edition, this app does not enroll authenticators
+with services, recover lost secrets, or migrate device-bound WinAuth encryption.
+It copies **one-time authentication codes**, not account passwords.
 
 ## Customize cards and preferences
 
@@ -196,15 +204,23 @@ included in the normal account-list response.
 
 ## Steam confirmations
 
+In the server edition, **Add Steam account** registers a mobile authenticator by
+logging into Steam, completing its email or official-app challenge, and verifying
+the SMS activation code. Steam requires an SMS-capable phone number and may prevent
+enrollment when an authenticator is already active. The generated secrets are
+saved in the encrypted vault, and the recovery code is shown once at the end;
+keep it private and backed up.
+
 The integration uses the modern `IAuthenticationService` credential login flow,
 Steam Guard verification, session polling, Community cookie transfer, and JSON
 `mobileconf/getlist` / `mobileconf/ajaxop` endpoints. It does not scrape the old
 WinAuth confirmation HTML.
 
-1. Import a full Steam URI containing `data.identity_secret`.
-2. Open **Confirmations** on the Steam account card and connect with that account's
-   Steam username/password. The imported Steam Guard secret supplies the mobile
-   code automatically; an email challenge is presented when Steam requests one.
+1. Enroll with **Add Steam account**, or import a full Steam URI containing
+   `data.identity_secret`.
+2. Open **Confirmations** on the Steam account card. For imported authenticators,
+   connect with that account's Steam username/password; the imported Steam Guard
+   secret supplies the mobile code automatically, or Steam may request an email code.
 3. Review each confirmation's headline, summary, and reference, then explicitly
    **Approve** or **Reject**, with a second confirmation prompt. Nothing is approved
    in the background or in bulk.
@@ -215,8 +231,8 @@ at Steam). Reconnect when Steam expires the session. An alternative connection f
 accepts your own `steamLoginSecure` cookie and SteamID64, verifies them against the
 confirmation endpoint, then saves them encrypted.
 
-Steam server time is queried before login/confirmation operations and refreshed
-every five minutes during use. Ordinary TOTP depends on the server's system clock:
+Steam server time is queried before enrollment, login, and confirmation operations,
+then refreshed every five minutes during use. Ordinary TOTP depends on the server's system clock:
 enable NTP. Steam actions surface expired sessions, missing secrets, rejected
 requests, and connectivity errors rather than reporting false success.
 
