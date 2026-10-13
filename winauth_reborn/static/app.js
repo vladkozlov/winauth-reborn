@@ -218,9 +218,6 @@ function accountCard(account) {
     account.kind === "steam" ? "Steam Guard" : account.kind === "hotp" ? "Counter-based" : "Time-based"));
   if (account.kind === "steam") {
     const links = element("div", "card-links");
-    const recovery = element("button", "steam-button", "Recovery details");
-    recovery.onclick = () => openRecovery(account);
-    links.append(recovery);
     const steamButton = element("button", "steam-button",
       account.confirmations_available ? "Confirmations \u2192" : "Missing confirmation data");
     steamButton.onclick = () => openSteam(accounts.find((item) => item.id === account.id) || account);

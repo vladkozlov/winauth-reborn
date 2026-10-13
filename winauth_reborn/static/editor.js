@@ -31,6 +31,7 @@ function openEditor(account) {
   $("#edit-advanced").hidden = account.kind === "steam";
   $("#edit-advanced").open = false;
   $("#edit-readonly-note").hidden = account.kind !== "steam";
+  $("#edit-recovery-button").hidden = account.kind !== "steam";
   for (const key of ["algorithm", "digits", "period", "secret"]) {
     form.elements[key].disabled = account.kind === "steam";
   }
@@ -52,6 +53,7 @@ document.querySelectorAll("[data-color]").forEach((button) => {
   };
 });
 $("#edit-form").oninput = updateEditorPreview;
+$("#edit-recovery-button").onclick = () => openRecovery(activeEdit);
 $("#edit-icon-file").onchange = async (event) => {
   const file = event.target.files[0];
   if (!file) return;

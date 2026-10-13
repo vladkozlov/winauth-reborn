@@ -293,6 +293,7 @@ def test_preferences_themes_compact_privacy_sort_and_shortcuts(browser_page):
 def test_recovery_is_revealed_only_after_confirmation_and_cleared(browser_page):
     page = browser_page
     import_sample(page)
+    page.get_by_role("button", name="Edit trader", exact=True).click()
     page.get_by_role("button", name="Recovery details", exact=True).click()
     expect(page.locator("#recovery-dialog")).not_to_be_visible()
     page.locator("#confirm-cancel").click()
@@ -316,6 +317,7 @@ def test_idle_privacy_and_recovery_timeout(browser_page):
     expect(page.locator("#settings-dialog")).not_to_be_visible()
     page.clock.fast_forward(31000)
     expect(page.locator("#privacy-button")).to_have_attribute("aria-pressed", "true")
+    page.get_by_role("button", name="Edit trader", exact=True).click()
     page.get_by_role("button", name="Recovery details", exact=True).click()
     page.locator("#confirm-ok").click()
     expect(page.locator('[data-field="recovery_code"]')).to_be_visible()
