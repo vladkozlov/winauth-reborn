@@ -36,7 +36,8 @@ include = ["winauth_reborn*"]
 
 [tool.setuptools.package-data]
 winauth_reborn = ["templates/*.html", "templates/*.j2", "static/*.css", "static/*.js",
-                 "static/icons/*.svg", "static/icons/LICENSE", "static/pwa/*.png"]
+                 "static/*.LICENSE", "static/icons/*.svg", "static/icons/LICENSE",
+                 "static/pwa/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

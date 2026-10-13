@@ -20,6 +20,13 @@ let initialized = false;
 let activeSteam = null;
 let emailFlow = null;
 let toastTimer;
+let qrStream = null;
+let qrFrame = null;
+let qrLastScan = 0;
+let qrCameraGeneration = 0;
+let qrImportUri = "";
+const qrCanvas = document.createElement("canvas");
+const qrContext = qrCanvas.getContext("2d", { willReadFrequently: true });
 const hotpCodes = new Map();
 const revealedCodes = new Set();
 const defaults = { theme: "dark", density: "comfortable", hide_codes: false, sort_order: "imported", auto_hide_seconds: 0 };
@@ -359,6 +366,200 @@ function openImport() {
   $("#import-dialog").showModal();
 }
 
+function openAddTotp() {
+  $("#add-totp-form").reset();
+  $("#add-totp-error").textContent = "";
+  $("#qr-error").textContent = "";
+  $("#qr-error").classList.remove("success");
+  qrImportUri = "";
+  $("#add-totp-dialog").showModal();
+}
+
+function setQrMessage(message, success = false) {
+  const output = $("#qr-error");
+  output.textContent = message;
+  output.classList.toggle("success", success);
+}
+
+function decodeQrImage(source, width, height) {
+  if (!window.jsQR) throw new Error("The QR decoder did not load. Refresh the page and try again.");
+  if (!width || !height) throw new Error("This image has no readable dimensions.");
+  const scale = Math.min(1, 1800 / Math.max(width, height));
+  const targetWidth = Math.max(1, Math.round(width * scale));
+  const targetHeight = Math.max(1, Math.round(height * scale));
+  qrCanvas.width = targetWidth;
+  qrCanvas.height = targetHeight;
+  qrContext.drawImage(source, 0, 0, targetWidth, targetHeight);
+  const pixels = qrContext.getImageData(0, 0, targetWidth, targetHeight);
+  return window.jsQR(pixels.data, targetWidth, targetHeight, {
+    inversionAttempts: "attemptBoth",
+  })?.data || "";
+}
+
+function fillTotpFromQr(text) {
+  let value = text.trim();
+  if (/^otpauth%3a/i.test(value)) value = decodeURIComponent(value);
+  const form = $("#add-totp-form");
+  let secret = value;
+  qrImportUri = "";
+
+  if (/^otpauth:/i.test(value)) {
+    let uri;
+    try { uri = new URL(value); }
+    catch { throw new Error("The QR code contains an invalid authenticator URI."); }
+    if (uri.protocol !== "otpauth:" || uri.hostname.toLowerCase() !== "totp" || uri.hash) {
+      throw new Error("This QR code is not a TOTP setup URI. Import its full URI instead.");
+    }
+    const label = decodeURIComponent(uri.pathname.replace(/^\/+/, ""));
+    const separator = label.indexOf(":");
+    const params = uri.searchParams;
+    const issuer = params.get("issuer") || (separator < 0 ? "" : label.slice(0, separator));
+    const name = separator < 0 ? label : label.slice(separator + 1);
+    if (issuer.toLowerCase() === "steam") {
+      throw new Error("Steam Guard QR codes need their full authenticator data; import a WinAuth export.");
+    }
+    secret = params.get("secret") || "";
+    if (!secret) throw new Error("This authenticator URI does not contain a shared secret.");
+
+    const algorithm = (params.get("algorithm") || "SHA1").toUpperCase();
+    const digits = params.get("digits") || "6";
+    const period = params.get("period") || "30";
+    if (!["SHA1", "SHA256", "SHA512"].includes(algorithm)) {
+      throw new Error("This QR code uses an unsupported algorithm.");
+    }
+    if (!/^(?:[5-9]|10)$/.test(digits)) {
+      throw new Error("TOTP digits must be between 5 and 10.");
+    }
+    if (!/^\d+$/.test(period) || Number(period) < 1 || Number(period) > 86400) {
+      throw new Error("TOTP period must be between 1 and 86400 seconds.");
+    }
+
+    form.elements.name.value = name || issuer;
+    form.elements.issuer.value = issuer;
+    form.elements.algorithm.value = algorithm;
+    form.elements.digits.value = digits;
+    form.elements.period.value = period;
+    qrImportUri = uri.href;
+  }
+
+  if (!secret) throw new Error("The QR code does not contain a shared key.");
+  form.elements.secret.value = secret;
+  setQrMessage("QR decoded on this device. Review the details below, then add the TOTP.", true);
+}
+
+async function selectQrImage(file) {
+  stopQrCamera();
+  setQrMessage("");
+  if (!file) return;
+  if (!file.type.startsWith("image/") || file.type === "image/svg+xml") {
+    setQrMessage("Choose a PNG, JPEG, WebP, GIF, or BMP QR image.");
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    setQrMessage("Choose a QR image smaller than 10 MB.");
+    return;
+  }
+
+  let bitmap;
+  let objectUrl = "";
+  try {
+    if (window.createImageBitmap) {
+      bitmap = await createImageBitmap(file);
+    } else {
+      objectUrl = URL.createObjectURL(file);
+      bitmap = new Image();
+      bitmap.src = objectUrl;
+      await bitmap.decode();
+    }
+    if (bitmap.width > 8192 || bitmap.height > 8192 || bitmap.width * bitmap.height > 20000000) {
+      throw new Error("This image is too large to decode safely.");
+    }
+    const decoded = decodeQrImage(bitmap, bitmap.width, bitmap.height);
+    if (!decoded) throw new Error("No QR code was found. Try a sharper, well-lit image.");
+    fillTotpFromQr(decoded);
+  } catch (error) {
+    setQrMessage(error.message || "Could not decode this QR image.");
+  } finally {
+    bitmap?.close?.();
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function stopQrCamera() {
+  qrCameraGeneration++;
+  if (qrFrame !== null) cancelAnimationFrame(qrFrame);
+  qrFrame = null;
+  if (qrStream) qrStream.getTracks().forEach((track) => track.stop());
+  qrStream = null;
+  const video = $("#qr-camera");
+  video.pause();
+  video.srcObject = null;
+  video.hidden = true;
+  $("#qr-camera-button").textContent = "Scan with camera";
+}
+
+function scanQrCamera(timestamp) {
+  if (!qrStream || !$("#add-totp-dialog").open) {
+    stopQrCamera();
+    return;
+  }
+  const video = $("#qr-camera");
+  if (timestamp - qrLastScan >= 250 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    qrLastScan = timestamp;
+    try {
+      const decoded = decodeQrImage(video, video.videoWidth, video.videoHeight);
+      if (decoded) {
+        stopQrCamera();
+        fillTotpFromQr(decoded);
+        return;
+      }
+    } catch (error) {
+      stopQrCamera();
+      setQrMessage(error.message || "Could not scan this QR code.");
+      return;
+    }
+  }
+  qrFrame = requestAnimationFrame(scanQrCamera);
+}
+
+async function startQrCamera() {
+  stopQrCamera();
+  const generation = qrCameraGeneration;
+  setQrMessage("");
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    setQrMessage("Camera scanning requires HTTPS or localhost and a supported browser.");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false,
+    });
+    if (generation !== qrCameraGeneration || !$("#add-totp-dialog").open) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    qrStream = stream;
+    const video = $("#qr-camera");
+    video.srcObject = qrStream;
+    video.hidden = false;
+    await video.play();
+    if (generation !== qrCameraGeneration || qrStream !== stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    $("#qr-camera-button").textContent = "Stop camera";
+    setQrMessage("Point the camera at the authenticator QR code. It is decoded locally.");
+    qrLastScan = 0;
+    qrFrame = requestAnimationFrame(scanQrCamera);
+  } catch (error) {
+    if (generation === qrCameraGeneration) {
+      stopQrCamera();
+      setQrMessage(error.message || "Camera access was unavailable or denied.");
+    }
+  }
+}
+
 async function selectFile(file) {
   if (!file) return;
   if (file.size > 2 * 1024 * 1024) {
@@ -376,6 +577,71 @@ async function selectFile(file) {
 
 $("#import-button").onclick = openImport;
 $("#empty-import").onclick = openImport;
+$("#add-totp-button").onclick = openAddTotp;
+$("#empty-add-totp").onclick = openAddTotp;
+$("#qr-camera-button").onclick = () => {
+  if (qrStream) {
+    stopQrCamera();
+    setQrMessage("");
+  } else {
+    startQrCamera();
+  }
+};
+$("#qr-image-button").onclick = () => $("#qr-image-file").click();
+$("#qr-image-file").onchange = (event) => {
+  selectQrImage(event.target.files[0]);
+  event.target.value = "";
+};
+$("#add-totp-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const submit = event.submitter;
+  const name = form.elements.name.value.trim();
+  const issuer = form.elements.issuer.value.trim();
+  if (issuer.toLowerCase() === "steam") {
+    $("#add-totp-error").textContent = "Import Steam Guard from a full WinAuth export instead.";
+    return;
+  }
+  const params = new URLSearchParams({
+    secret: form.elements.secret.value.trim(),
+    algorithm: form.elements.algorithm.value,
+    digits: form.elements.digits.value,
+    period: form.elements.period.value,
+  });
+  if (issuer) params.set("issuer", issuer);
+  let uri;
+  if (qrImportUri) {
+    const original = new URL(qrImportUri);
+    original.pathname = `/${issuer ? `${encodeURIComponent(issuer)}:` : ""}${encodeURIComponent(name)}`;
+    for (const [key, value] of params) original.searchParams.set(key, value);
+    if (issuer) original.searchParams.set("issuer", issuer);
+    else original.searchParams.delete("issuer");
+    uri = original.href;
+  } else {
+    uri = `otpauth://totp/${encodeURIComponent(name)}?${params}`;
+  }
+  submit.disabled = true;
+  $("#add-totp-error").textContent = "";
+  try {
+    const result = await json("/api/import", {
+      method: "POST", body: JSON.stringify({ text: uri }),
+    });
+    $("#add-totp-dialog").close();
+    await loadAccounts(true);
+    toast(result.added ? "TOTP added" : "This TOTP is already in your vault");
+  } catch (error) { $("#add-totp-error").textContent = error.message; }
+  finally { submit.disabled = false; }
+};
+$("#add-totp-dialog").addEventListener("close", () => {
+  stopQrCamera();
+  $("#add-totp-form").reset();
+  $("#add-totp-error").textContent = "";
+  setQrMessage("");
+  qrImportUri = "";
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopQrCamera();
+});
 $("#import-file").onchange = (event) => selectFile(event.target.files[0]);
 $("#dropzone").onkeydown = (event) => {
   if (event.key === "Enter" || event.key === " ") {

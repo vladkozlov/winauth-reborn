@@ -1,0 +1,10 @@
+{
+  "name": "winauth-reborn-web-assets",
+  "private": true,
+  "scripts": {
+    "vendor:qr": "node scripts/vendor-qr.js"
+  },
+  "devDependencies": {
+    "jsqr": "1.4.0"
+  }
+}

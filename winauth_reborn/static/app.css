@@ -147,6 +147,11 @@ dialog::backdrop { background: #060a09bc; backdrop-filter: blur(5px); }
 .dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 25px 15px; border: 1px dashed #5d7255; border-radius: 10px; background: #b4ef8205; margin: 22px 0; cursor: pointer; text-align: center; overflow-wrap: anywhere; }
 .dropzone.dragover { border-color: var(--accent); background: #b4ef8210; }
 .upload-symbol { font-size: 27px; color: var(--accent); }
+.qr-import { border-bottom: 1px solid var(--border); padding: 4px 0 16px; margin: 20px 0; }
+.qr-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.qr-camera { display: block; width: 100%; max-height: 300px; margin-top: 14px; border-radius: 9px; background: #000; object-fit: contain; }
+.qr-import .form-error.success { color: var(--accent); }
+.qr-import > .muted { margin: 12px 0 0; }
 .field { display: flex; flex-direction: column; gap: 7px; margin: 17px 0; font-size: 12px; color: var(--muted); }
 .field input, .field textarea, .field select { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text); }
 textarea { resize: vertical; font-family: ui-monospace, monospace; font-size: 12px; }
