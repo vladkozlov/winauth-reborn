@@ -387,6 +387,16 @@ def test_service_worker_update_preserves_vault_and_other_apps_caches(
         unlock(page)
         expect(page.locator(".account-card")).to_have_count(3)
         assert stored_envelope(page) == original_envelope
+        cache_state = page.evaluate(
+            """() => new Promise(resolve => {
+              const channel = new MessageChannel();
+              channel.port1.onmessage = event => resolve(event.data);
+              navigator.serviceWorker.controller.postMessage('GET_CACHE_INFO', [channel.port2]);
+            })"""
+        )
+        assert cache_state["cache"].endswith("-update"), (
+            f"Page is controlled by the wrong worker: {cache_state}"
+        )
         names = page.evaluate("caches.keys()")
         assert "unrelated-app-cache" in names
         assert any(name.endswith("-update") for name in names), (
