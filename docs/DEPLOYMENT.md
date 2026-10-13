@@ -73,6 +73,26 @@ The same image reference works on ordinary x86-64 servers and ARM64 machines.
 Compose binds to `127.0.0.1:8080`, runs the application unprivileged, and keeps the
 vault in the `vault` named volume. No source checkout or image build is needed.
 
+### Optional outbound Steam SOCKS proxy
+
+If Steam rate-limits the VPS's public IP, you can route the app's Steam traffic
+through a SOCKS5h proxy running on a trusted machine, such as a Raspberry Pi at
+home. Establish a private network tunnel such as WireGuard between the VPS and
+the Pi, and make the proxy reachable only over that tunnel. **Do not expose an
+unauthenticated SOCKS port to the public internet.**
+
+Add the proxy's tunnel address to the server's private `.env`:
+
+```dotenv
+WINAUTH_STEAM_PROXY=socks5h://10.10.0.2:1080
+```
+
+Use `socks5h` (not `socks5`) so Steam hostnames are resolved by the proxy side.
+The setting applies to Steam login, time sync, and confirmation requests; normal
+browser traffic to WinAuth is unaffected. Recreate the container after changing
+`.env`. A proxy does not bypass Steam limits, and requests can still be throttled
+if the home IP or Steam account is rate-limited.
+
 ### HTTPS with Caddy
 
 On the same server, use:
