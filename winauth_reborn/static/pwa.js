@@ -38,9 +38,6 @@
     const reload = () => {
       if (!reloading) { reloading = true; location.reload(); }
     };
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (update.dataset.accepted === "true") reload();
-    });
     const watchUpdate = () => {
       const worker = registration.waiting;
       update.hidden = !worker;
@@ -63,9 +60,9 @@
             watchUpdate();
           }
         });
-        if (worker.state === "activated" || navigator.serviceWorker.controller === worker) {
+        if (worker.state === "activated") {
           reload();
-        } else {
+        } else if (navigator.serviceWorker.controller !== worker) {
           try { worker.postMessage("ACTIVATE_UPDATE"); }
           catch (error) {
             update.dataset.accepted = "false";

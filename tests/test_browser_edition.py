@@ -420,14 +420,21 @@ def test_update_handles_worker_transition_during_confirmation(
               container.ready = Promise.resolve(registration);
               worker.postMessage = (message) => {
                 sessionStorage.setItem('test-update-message', message);
-                worker.state = 'activated';
+                worker.state = 'activating';
                 registration.waiting = null;
                 container.controller = worker;
                 worker.dispatchEvent(new Event('statechange'));
                 container.dispatchEvent(new Event('controllerchange'));
+                setTimeout(() => {
+                  worker.state = 'activated';
+                  worker.dispatchEvent(new Event('statechange'));
+                }, 50);
               };
               Object.defineProperty(navigator, 'serviceWorker', {value: container});
               window.testUpdate = {worker, registration, container};
+              window.addEventListener('beforeunload', () => {
+                sessionStorage.setItem('test-update-state-at-navigation', window.testUpdate.worker.state);
+              });
             })()"""
         )
         page.goto(static_browser[0])
@@ -454,6 +461,10 @@ def test_update_handles_worker_transition_during_confirmation(
             assert len(navigations) == 1
             expected = "ACTIVATE_UPDATE" if worker_state == "installed" else None
             assert page.evaluate("sessionStorage.getItem('test-update-message')") == expected
+            assert (
+                page.evaluate("sessionStorage.getItem('test-update-state-at-navigation')")
+                == "activated"
+            )
         else:
             page.locator("#pwa-update").click()
             assert navigations == []

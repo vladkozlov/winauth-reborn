@@ -4,8 +4,8 @@
 
 - Fixed PWA update races when a waiting worker activates during the confirmation
   dialog, preserving explicit consent and reloading only once.
-- Fixed stale PWA caches reappearing during activation by claiming clients before
-  deleting older app caches.
+- Fixed PWA updates reloading only after the new worker finishes activation and
+  stale app-cache cleanup.
 - Fixed Compose validation in fresh GitHub Actions checkouts by creating a local
   configuration fixture from `.env.example`; no private credentials are needed.
 
