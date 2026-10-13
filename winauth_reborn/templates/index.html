@@ -7,6 +7,7 @@
   <meta name="color-scheme" content="dark light">
   <title>WinAuth Reborn</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  {% include 'pwa_head.html' %}
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
   <script src="{{ url_for('static', filename='editor.js') }}" defer></script>
   <script src="{{ url_for('static', filename='settings.js') }}" defer></script>
@@ -59,6 +60,7 @@
     <p id="no-results" class="empty-state" hidden>No matching authenticators.</p>
     <footer>WinAuth Reborn <span>&middot;</span> Self-hosted. Yours to keep. <button class="text-button mobile-only" id="mobile-export-button">Export backup</button><span id="refresh-status"></span></footer>
   </main>
+  {% include 'pwa_controls.html' %}
 
   <dialog id="import-dialog" aria-labelledby="import-title">
     <div class="dialog-heading"><div><span class="eyebrow">BRING YOUR ACCOUNTS</span><h2 id="import-title">Import authenticators</h2></div><button class="close-button" data-close aria-label="Close import">&times;</button></div>

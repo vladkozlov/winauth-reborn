@@ -7,6 +7,7 @@
   <title>Sign in - WinAuth Reborn</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+  {% include 'pwa_head.html' %}
   <script src="{{ url_for('static', filename='login.js') }}" defer></script>
 </head>
 <body class="login-page">
@@ -47,6 +48,7 @@
       </div>
       <div class="login-footer"><span class="private-badge"><span class="status-dot"></span> Private by design</span><button class="text-button" id="forget-login" type="button" hidden>Forget saved login</button></div>
       <p id="secure-context-note" class="muted">Use HTTPS when accessing this server over a network.</p>
+      {% include 'pwa_controls.html' %}
     </section>
   </div>
   <dialog id="forget-dialog" class="confirm-dialog" aria-labelledby="forget-title">

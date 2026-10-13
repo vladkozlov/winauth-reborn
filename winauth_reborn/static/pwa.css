@@ -1,0 +1,7 @@
+.pwa-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 48px 24px 288px; }
+.login-page .pwa-tools, .vault-locked .pwa-tools { margin: 16px 0 0; justify-content: center; }
+.vault-locked .pwa-tools { margin: 16px; }
+.pwa-tools .muted { font-size: 12px; }
+.offline-page { max-width: 560px; padding: 32px; margin: 12vh auto; }
+@media (max-width: 900px) { .pwa-tools { margin: 0 22px 24px; } }
+@media (display-mode: standalone) { body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); } }

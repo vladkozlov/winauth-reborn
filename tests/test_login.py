@@ -27,6 +27,24 @@ def test_friendly_login_is_public_but_vault_remains_private(client):
     assert client.get("/api/accounts").status_code == 401
 
 
+def test_public_pwa_shell_and_manifest_do_not_expose_the_vault(client):
+    manifest = client.get("/static/manifest.webmanifest")
+    assert manifest.status_code == 200 and manifest.mimetype == "application/manifest+json"
+    assert manifest.json["start_url"] == "../" and manifest.json["display"] == "standalone"
+    for icon in manifest.json["icons"]:
+        response = client.get("/static/" + icon["src"])
+        assert response.status_code == 200 and response.mimetype == "image/png"
+    worker = client.get("/service-worker.js")
+    assert worker.status_code == 200 and worker.mimetype == "application/javascript"
+    assert worker.headers["Service-Worker-Allowed"] == "/"
+    assert '"./login"' in worker.text and '"./static/offline.html"' in worker.text
+    assert 'const MODE = "server"' in worker.text
+    assert "/api/" not in worker.text and '"./index.html"' not in worker.text
+    assert client.get("/static/offline.html").status_code == 200
+    assert client.get("/static/browser-vault.js").status_code == 401
+    assert client.get("/api/export").status_code == 401
+
+
 def test_cookie_session_contains_no_credentials_and_requires_csrf(app, client, auth):
     response = login(client, auth)
     assert response.status_code == 200

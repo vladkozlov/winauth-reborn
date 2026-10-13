@@ -3,7 +3,7 @@
 import io
 import json
 import threading
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import pytest
 from PIL import Image
@@ -495,3 +495,26 @@ def test_failed_pin_storage_signs_out_instead_of_silently_remembering(browser_pa
     )
     page.locator("#remember-browser").uncheck()
     sign_in(page)
+
+
+def test_server_pwa_never_caches_vault_data_and_shows_offline_notice(browser_page):
+    page = browser_page
+    import_sample(page)
+    page.wait_for_function("navigator.serviceWorker.controller !== null")
+    cached = page.evaluate(
+        """async () => {
+          const urls = [];
+          for (const name of await caches.keys()) {
+            for (const request of await (await caches.open(name)).keys()) urls.push(request.url);
+          }
+          return urls;
+        }"""
+    )
+    assert any(url.endswith("/login") for url in cached)
+    assert not any("/api/" in url for url in cached)
+    assert not any(urlsplit(url).path == "/" for url in cached)
+    assert not any(url.endswith("/static/app.js") for url in cached)
+    page.context.set_offline(True)
+    page.reload()
+    expect(page.get_by_role("heading", name="Your server is unavailable.")).to_be_visible()
+    assert "R-SYNTHETIC-ONLY" not in page.content()

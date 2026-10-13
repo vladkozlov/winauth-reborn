@@ -15,6 +15,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from .appearance import ICONS
 from .authenticators import decode_secret, export_record, generate_code, parse_export
+from .pwa import PUBLIC_ASSETS, fingerprint, manifest
 from .steam import SteamError, SteamService, cookie_session
 from .storage import AccountNotFound, Vault
 
@@ -48,15 +49,24 @@ def create_app(config: dict | None = None) -> Flask:
     csrf = secrets.token_urlsafe(32)
     app.secret_key = secrets.token_bytes(32)
     app.config["SESSION_COOKIE_SECURE"] = app.config["HTTPS_ONLY"]
+    source = Path(__file__).parent
+    pwa_fingerprint = fingerprint(
+        [source / "static" / name for name in PUBLIC_ASSETS]
+        + [
+            source / "pwa.py",
+            source / "templates" / "login.html",
+            source / "templates" / "pwa_head.html",
+            source / "templates" / "pwa_controls.html",
+            source / "templates" / "service-worker.js.j2",
+        ]
+    )
 
     @app.before_request
     def authenticate():
-        public_asset = request.endpoint == "static" and request.view_args.get("filename") in {
-            "app.css",
-            "login.css",
-            "login.js",
-        }
-        if request.endpoint == "login_page" or public_asset:
+        public_asset = (
+            request.endpoint == "static" and request.view_args.get("filename") in PUBLIC_ASSETS
+        )
+        if request.endpoint in {"login_page", "pwa_manifest", "pwa_worker"} or public_asset:
             return None
         browser_login = request.endpoint == "browser_login"
         auth = request.authorization
@@ -169,6 +179,24 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/login")
     def login_page():
         return render_template("login.html")
+
+    @app.get("/static/manifest.webmanifest")
+    def pwa_manifest():
+        return jsonify(manifest()), 200, {"Content-Type": "application/manifest+json"}
+
+    @app.get("/service-worker.js")
+    def pwa_worker():
+        return Response(
+            render_template(
+                "service-worker.js.j2",
+                mode="server",
+                fingerprint=pwa_fingerprint,
+                assets=["./login", "./static/manifest.webmanifest"]
+                + ["./static/" + name for name in sorted(PUBLIC_ASSETS)],
+            ),
+            mimetype="application/javascript",
+            headers={"Service-Worker-Allowed": "/"},
+        )
 
     @app.post("/api/login")
     def browser_login():
