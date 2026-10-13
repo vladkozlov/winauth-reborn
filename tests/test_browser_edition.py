@@ -388,13 +388,32 @@ def test_service_worker_update_preserves_vault_and_other_apps_caches(
         expect(page.locator(".account-card")).to_have_count(3)
         assert stored_envelope(page) == original_envelope
         cache_state = page.evaluate(
-            """() => new Promise(resolve => {
-              const channel = new MessageChannel();
-              channel.port1.onmessage = event => resolve(event.data);
-              navigator.serviceWorker.controller.postMessage('GET_CACHE_INFO', [channel.port2]);
-            })"""
+            """async () => {
+              const registration = await navigator.serviceWorker.getRegistration();
+              const inspect = worker => worker && new Promise(resolve => {
+                const channel = new MessageChannel();
+                const timeout = setTimeout(() => resolve({timeout: true}), 1500);
+                channel.port1.onmessage = event => {
+                  clearTimeout(timeout);
+                  resolve(event.data);
+                };
+                worker.postMessage('GET_CACHE_INFO', [channel.port2]);
+              });
+              return {
+                controller: await inspect(navigator.serviceWorker.controller),
+                active: await inspect(registration.active),
+                waiting: await inspect(registration.waiting),
+                installing: await inspect(registration.installing),
+                states: {
+                  controller: navigator.serviceWorker.controller?.state,
+                  active: registration.active?.state,
+                  waiting: registration.waiting?.state,
+                  installing: registration.installing?.state
+                }
+              };
+            }"""
         )
-        assert cache_state["cache"].endswith("-update"), (
+        assert cache_state["controller"]["cache"].endswith("-update"), (
             f"Page is controlled by the wrong worker: {cache_state}"
         )
         names = page.evaluate("caches.keys()")
